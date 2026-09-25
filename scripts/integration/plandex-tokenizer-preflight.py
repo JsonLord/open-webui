@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
+from plandex_tokenizer_runtime import tokenizer
 
-from open_webui.control_plane.plandex_tokenizer import preflight
+preflight = tokenizer.preflight
 
 try:
     artifact = preflight()

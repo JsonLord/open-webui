@@ -351,3 +351,6 @@ budget measurements, load time/status, and current/stale state. The adapter uses
 to make retries idempotent. Named local piped context bypasses Plandex's optional
 model-based naming call; smart/auto context remains enabled. Query, rendering,
 or load failure is non-critical and cannot fail the coding task.
+
+### Phase 3H fresh-runtime reconfirmation
+On 2026-09-25 the native lifecycle was rerun from an empty dedicated PostgreSQL 16.15 database and clean persistent CLI home. Verified tokenizer preflight, zero-TTY first/repeat/recovery auth, native `new`, structured `current --json`, and identical identity after server restart all passed. Deployment tokenizer scripts now load their dependency-free contract without executing the Open WebUI package initializer, preserving the intentionally minimal runtime dependency boundary. Phase 3 remains closed; Phase 4B is next.

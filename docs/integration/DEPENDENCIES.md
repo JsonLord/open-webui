@@ -105,3 +105,6 @@ The copied Plandex source has a small deployment extension: named piped context
 (`load --name`) avoids its model-assisted name generation and `ls --json`
 provides stable verification. This reuses the native server context API and
 database; no context JSON or Plandex row is externally fabricated.
+
+## Phase 3H concrete runtime (2026-09-25)
+The closure rerun used PostgreSQL 16.15, Go 1.25.1-built native Plandex server/CLI binaries, and the upstream server's pinned isolated Python set (`litellm==1.72.6`, `fastapi==0.115.12`, `uvicorn==0.34.1`, `google-cloud-aiplatform==1.96.0`, `boto3==1.38.40`, `botocore==1.38.40`). No root Python requirements, Plandex docs dependencies, or unrelated frontend packages were installed. Tokenizer-only scripts have no Open WebUI application dependency.

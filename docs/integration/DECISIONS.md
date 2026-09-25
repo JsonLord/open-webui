@@ -306,3 +306,10 @@ or zero-match graphs and any query/load failure remains non-critical. Loaded
 context describes only the base SHA; post-edit refresh is deliberately deferred.
 The copied Plandex CLI adds `load --name` and `ls --json`, which must be rebased
 with the existing local-mode patch during an upstream update.
+
+## 2026-09-25 — Keep tokenizer deployment checks application-independent
+**Decision:** Build-time acquisition and supervisor preflights load the dependency-free tokenizer contract without importing the `open_webui` package.
+
+**Reason:** A minimal Plandex runtime correctly omits web-application dependencies; executing the package initializer made a valid tokenizer preflight fail on an unrelated optional `typer` import.
+
+**Consequences:** The runtime image stays targeted, while the contract continues to have one authoritative implementation under `backend/open_webui/control_plane`.

@@ -6,14 +6,12 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'backend'))
+from plandex_tokenizer_runtime import tokenizer
 
-from open_webui.control_plane.plandex_tokenizer import preflight as tokenizer_preflight  # noqa: E402
+tokenizer_preflight = tokenizer.preflight
 
 
 def child_environment() -> tuple[dict[str, str], Path, str]:
