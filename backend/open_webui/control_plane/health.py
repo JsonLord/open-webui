@@ -13,6 +13,33 @@ def _needle_status():
         return {'loaded': False, 'runtime_verified': False}
 
 
+ARTIFACT_MANIFEST = {
+    'plandex_source_revision': os.getenv('PLANDEX_REVISION', 'unknown'),
+    'github_mcp_version': os.getenv('GITHUB_MCP_VERSION', 'stdio-2025-06-18'),
+    'graphify_version': '0.9.67',
+    'needle_version': '0.1.0',
+    'tokenizer_cache_key': 'o200k_base',
+    'headroom_version': '0.1.0',
+}
+
+PERSISTENCE_MAP = {
+    'must_persist': [
+        '/var/lib/postgresql/data',
+        '~/.plandex',
+        'backend/open_webui/data',
+        '/tmp/graphify-indexes',
+    ],
+    'may_rebuild': [
+        '/tmp/graphify-staging',
+        '~/.cache/tiktoken',
+    ],
+    'must_not_persist': [
+        'logs/secrets',
+        'temp_env_dumps',
+    ],
+}
+
+
 def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
     needle = _needle_status()
     state = {
@@ -43,6 +70,12 @@ def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
             'storage_available': False,
             'indexing_capable': bool(shutil.which(os.getenv('GRAPHIFY_EXECUTABLE', 'graphify'))),
         },
+        'jit': {
+            'configured': bool(os.getenv('JIT_BASE_URL')),
+            'reachable': False,
+            'runtime_verified': False,
+            'degraded': True,
+        },
         'git': {
             'configured': bool(shutil.which('git')),
             'reachable': bool(shutil.which('git')),
@@ -56,10 +89,16 @@ def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
     }
     for key, value in (probes or {}).items():
         state.setdefault(key, {}).update(value)
-    # Graphify is optional supporting intelligence in Phase 4 and therefore
-    # does not make the application unhealthy when unavailable.
-    required = {'postgresql', 'plandex', 'headroom', 'spark_contract', 'needle', 'github_mcp', 'git'}
+
+    critical_local = {'postgresql', 'plandex', 'git'}
+    optional_or_remote = {'graphify', 'jit', 'headroom', 'spark_contract', 'needle', 'github_mcp', 'gh'}
+
+    critical_ok = all(state[name]['configured'] and state[name]['reachable'] for name in critical_local if name in state)
+
     return {
-        'ok': all(state[name]['configured'] and state[name]['reachable'] for name in required),
+        'ok': critical_ok,
+        'critical_local_ok': critical_ok,
         'components': state,
+        'artifact_manifest': ARTIFACT_MANIFEST,
+        'persistence_map': PERSISTENCE_MAP,
     }
