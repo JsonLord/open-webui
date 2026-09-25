@@ -54,9 +54,13 @@ func init() {
 	if err != nil {
 		term.OutputErrorAndExit(err.Error())
 	}
-	err = os.Setenv("TIKTOKEN_CACHE_DIR", CacheDir)
-	if err != nil {
-		term.OutputErrorAndExit(err.Error())
+	// Deployment may provide a verified, read-only tokenizer cache. Preserve
+	// that explicit setting so task processes never fall back to a download.
+	if os.Getenv("TIKTOKEN_CACHE_DIR") == "" {
+		err = os.Setenv("TIKTOKEN_CACHE_DIR", CacheDir)
+		if err != nil {
+			term.OutputErrorAndExit(err.Error())
+		}
 	}
 
 	FindPlandexDir()

@@ -263,6 +263,12 @@ once after server/tokenizer readiness; task workers have stdin closed and only
 consume validated persisted auth. Tokens never enter task storage, events,
 model context, or logs.
 
+The supervisor launches `start-plandex-server.sh`, then runs
+`bootstrap-plandex-local.sh` as its readiness gate. The gate waits for `/health`,
+preflights the immutable tokenizer cache, validates existing native auth, and
+only invokes local sign-in when validation fails. It must succeed before the
+control plane accepts Plandex tasks.
+
 `plandex current --json` is the stable machine interface for plan identity. The
 control plane stores distinct native plan ID, plan name, project ID, and current
 verification state; it does not parse decorated terminal output or overload a

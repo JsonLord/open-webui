@@ -78,6 +78,21 @@ func TestSignInLocalUsesExistingAccount(t *testing.T) {
 	assertPrivateAuthFiles(t)
 }
 
+func TestSignInLocalTightensExistingAuthFilePermissions(t *testing.T) {
+	configureAuthPaths(t)
+	for _, path := range []string{fs.HomeAuthPath, fs.HomeAccountsPath} {
+		if err := os.WriteFile(path, []byte("[]"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	client := &localAuthClient{hasAccount: true}
+	SetApiClient(client)
+	if err := SignInLocal("http://127.0.0.1:8099"); err != nil {
+		t.Fatal(err)
+	}
+	assertPrivateAuthFiles(t)
+}
+
 func TestValidateLocalAuthUsesPersistedNativeState(t *testing.T) {
 	configureAuthPaths(t)
 	client := &localAuthClient{}
@@ -102,10 +117,24 @@ func TestSignInLocalRejectsNonLocalServer(t *testing.T) {
 	}
 }
 
+func TestSignInLocalReportsUnavailableServer(t *testing.T) {
+	configureAuthPaths(t)
+	SetApiClient(&unavailableLocalClient{})
+	if err := SignInLocal("http://127.0.0.1:8099"); err == nil {
+		t.Fatal("expected unavailable server error")
+	}
+}
+
 type nonLocalClient struct{ types.ApiClient }
 
 func (c *nonLocalClient) CreateEmailVerification(email, host, userId string) (*shared.CreateEmailVerificationResponse, *shared.ApiError) {
 	return &shared.CreateEmailVerificationResponse{IsLocalMode: false}, nil
+}
+
+type unavailableLocalClient struct{ types.ApiClient }
+
+func (c *unavailableLocalClient) CreateEmailVerification(email, host, userId string) (*shared.CreateEmailVerificationResponse, *shared.ApiError) {
+	return nil, &shared.ApiError{Status: 503, Msg: "server unavailable"}
 }
 
 func assertPrivateAuthFiles(t *testing.T) {
