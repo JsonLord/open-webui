@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import signal
 import subprocess
@@ -15,10 +16,16 @@ from .plandex_tokenizer import preflight as tokenizer_preflight
 
 
 def redact(text: str, secrets: tuple[str, ...] | None = None) -> str:
-    for secret in secrets or (os.getenv('GITHUB_PAT', ''),):
+    for secret in secrets or (
+        os.getenv('GITHUB_PAT', ''),
+        os.getenv('PLANDEX_AUTH_TOKEN', ''),
+    ):
         if secret:
             text = text.replace(secret, '[REDACTED]')
-    return text
+    # Native/client errors must not leak a bearer credential even when it was
+    # not supplied through our environment (for example, a reflected header).
+    text = re.sub(r'(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+', r'\1[REDACTED]', text)
+    return re.sub(r'(?i)(["\']token["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', text)
 
 
 @dataclass(frozen=True)

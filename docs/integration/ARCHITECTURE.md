@@ -182,6 +182,11 @@ acceptance. `PLANDEX_CLI_HOME` is shared only as process HOME, never copied into
 a worktree. Structured current-plan identity flows from native CLI JSON into the
 durable task payload/event.
 
+The process supervisor starts the server with `start-plandex-server.sh` and
+uses `bootstrap-plandex-local.sh` as the task-acceptance readiness gate. That
+gate orders `/health`, tokenizer verification, native auth validation/bootstrap,
+and final validation; no task execution path calls sign-in.
+
 ## Phase 4 current architecture — structural repository graph
 
 ```text

@@ -504,3 +504,20 @@ and calibrate thresholds. Phase 3 remains blocked on Phase 2B completion.
 - Repeat native `load --name` / `ls --json` in the prepared Phase-3 runtime.
 - Once verified, begin Phase 5 JIT planning/checkpoints; do not add post-edit
   Graphify refresh or model-routed Graphify queries in this increment.
+
+## 2026-09-25 — Phase 3G auth hardening follow-up
+
+- Added an explicit supervisor readiness gate that waits for the loopback
+  Plandex health endpoint before tokenizer and native local-auth preflights.
+- Native auth writes now tighten pre-existing `auth.json` and `accounts.json`
+  files to 0600, rather than relying on create-time modes alone.
+- The copied CLI preserves an explicitly configured read-only
+  `TIKTOKEN_CACHE_DIR`, preventing task startup from replacing the deployment
+  cache location with its private home cache.
+- Central bounded-error redaction now covers Plandex bearer and JSON token
+  forms without reading or logging native auth state.
+- This checkout has no PostgreSQL client/server, Plandex binaries, or installed
+  tokenizer cache, and Go dependency downloads return HTTP 403. Consequently,
+  no new live server/auth/plan/restart verification is claimed by this
+  follow-up; the deterministic tokenizer tests passed and runtime checks remain
+  represented by the previously recorded deployment verification.

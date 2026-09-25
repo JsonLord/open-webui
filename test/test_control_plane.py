@@ -149,6 +149,13 @@ class ControlPlaneTests(unittest.TestCase):
     def test_secret_redaction(self):
         self.assertEqual(redact('token SECRET', ('SECRET',)), 'token [REDACTED]')
 
+    def test_plandex_bearer_redaction(self):
+        self.assertEqual(
+            redact('Authorization: Bearer native-secret'),
+            'Authorization: Bearer [REDACTED]',
+        )
+        self.assertEqual(redact('{"token":"native-secret"}'), '{"token":"[REDACTED]"}')
+
     def test_github_secret_is_not_forwarded_or_persisted(self):
         secret = 'PHASE3D_FAKE_TOKEN_DO_NOT_LEAK_9f3a'
         executable = Path(self.temp.name) / 'print-env'
