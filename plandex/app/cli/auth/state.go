@@ -77,10 +77,15 @@ func storeAccount(toStore *shared.ClientAccount) error {
 		return fmt.Errorf("error marshalling accounts: %v", err)
 	}
 
-	err = os.WriteFile(fs.HomeAccountsPath, bytes, os.ModePerm)
+	err = os.WriteFile(fs.HomeAccountsPath, bytes, 0600)
 
 	if err != nil {
 		return fmt.Errorf("error writing accounts: %v", err)
+	}
+	// WriteFile does not tighten the mode of an existing file. Auth state may
+	// predate the private-mode default, so enforce it after every native write.
+	if err = os.Chmod(fs.HomeAccountsPath, 0600); err != nil {
+		return fmt.Errorf("error securing accounts: %v", err)
 	}
 
 	return nil
@@ -97,10 +102,13 @@ func writeCurrentAuth() error {
 		return fmt.Errorf("error marshalling auth: %v", err)
 	}
 
-	err = os.WriteFile(fs.HomeAuthPath, bytes, os.ModePerm)
+	err = os.WriteFile(fs.HomeAuthPath, bytes, 0600)
 
 	if err != nil {
 		return fmt.Errorf("error writing auth: %v", err)
+	}
+	if err = os.Chmod(fs.HomeAuthPath, 0600); err != nil {
+		return fmt.Errorf("error securing auth: %v", err)
 	}
 
 	return nil

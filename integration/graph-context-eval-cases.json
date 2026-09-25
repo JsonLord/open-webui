@@ -1,0 +1,16 @@
+[
+  {
+    "id": "graph-service-lifecycle",
+    "objective": "Change `RepositoryGraphService` and keep callers compatible.",
+    "explicit_symbols": ["RepositoryGraphService"],
+    "expected_files": ["backend/open_webui/control_plane/graph.py"],
+    "expected_symbols": ["RepositoryGraphService"]
+  },
+  {
+    "id": "control-plane-index-trigger",
+    "objective": "Update `backend/open_webui/control_plane/service.py` graph indexing behavior.",
+    "explicit_paths": ["backend/open_webui/control_plane/service.py"],
+    "expected_files": ["backend/open_webui/control_plane/service.py"],
+    "expected_symbols": ["prepare_repository"]
+  }
+]

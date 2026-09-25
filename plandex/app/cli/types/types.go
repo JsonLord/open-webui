@@ -9,6 +9,7 @@ import (
 
 type LoadContextParams struct {
 	Note              string
+	Name              string
 	Recursive         bool
 	NamesOnly         bool
 	ForceSkipIgnore   bool

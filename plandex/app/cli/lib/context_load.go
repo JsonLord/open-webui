@@ -52,13 +52,14 @@ func MustLoadContext(resources []string, params *types.LoadContextParams) {
 	var authVars map[string]string
 	var openAIBase string
 
-	if params.Note != "" || fileInfo.Mode()&os.ModeNamedPipe != 0 {
+	if (params.Note != "" || fileInfo.Mode()&os.ModeNamedPipe != 0) && params.Name == "" {
 		authVars = MustVerifyAuthVarsSilent(auth.Current.IntegratedModelsMode)
 	}
 
 	if params.Note != "" {
 		loadContextReq = append(loadContextReq, &shared.LoadContextParams{
 			ContextType: shared.ContextNoteType,
+			Name:        params.Name,
 			Body:        params.Note,
 			ApiKeys:     authVars,
 			OpenAIBase:  openAIBase,
@@ -78,6 +79,7 @@ func MustLoadContext(resources []string, params *types.LoadContextParams) {
 		if len(pipedData) > 0 {
 			loadContextReq = append(loadContextReq, &shared.LoadContextParams{
 				ContextType: shared.ContextPipedDataType,
+				Name:        params.Name,
 				Body:        string(pipedData),
 				ApiKeys:     authVars,
 				OpenAIBase:  openAIBase,

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://plandex.ai/schemas/models-input.schema.json",
+  "providers": [
+    {
+      "name": "spark-via-headroom",
+      "baseUrl": "${HEADROOM_BASE_URL}",
+      "apiKeyEnvVar": "SPARK_API_KEY"
+    }
+  ],
+  "models": [
+    {
+      "modelId": "spark-worker",
+      "publisher": "Spark",
+      "description": "Remote Spark served exclusively through the local Headroom proxy",
+      "defaultMaxConvoTokens": 24576,
+      "maxTokens": 32768,
+      "maxOutputTokens": 4096,
+      "reservedOutputTokens": 4096,
+      "preferredOutputFormat": "xml",
+      "providers": [
+        {
+          "provider": "custom",
+          "customProvider": "spark-via-headroom",
+          "modelName": "${SPARK_MODEL}"
+        }
+      ]
+    }
+  ],
+  "modelPacks": [
+    {
+      "name": "spark-headroom",
+      "description": "Phase 1 pack: remote Spark roles routed through Headroom",
+      "planner": "spark-worker",
+      "architect": "spark-worker",
+      "coder": "spark-worker",
+      "summarizer": "spark-worker",
+      "builder": "spark-worker",
+      "wholeFileBuilder": "spark-worker",
+      "names": "spark-worker",
+      "commitMessages": "spark-worker",
+      "autoContinue": "spark-worker"
+    }
+  ]
+}

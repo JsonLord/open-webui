@@ -86,6 +86,10 @@ func StartServer(handler http.Handler, configureFn func(handler http.Handler) ht
 	if externalPort == "" {
 		externalPort = "8099"
 	}
+	bindHost := os.Getenv("HOST")
+	if bindHost == "" {
+		bindHost = "0.0.0.0"
+	}
 
 	// Add logging middleware before the maxBytes middleware
 	handler = loggingMiddleware(handler)
@@ -98,7 +102,7 @@ func StartServer(handler http.Handler, configureFn func(handler http.Handler) ht
 	}
 
 	server := &http.Server{
-		Addr:              ":" + externalPort,
+		Addr:              bindHost + ":" + externalPort,
 		Handler:           handler,
 		MaxHeaderBytes:    1 << 20, // 1 MB
 		ReadHeaderTimeout: 5 * time.Second,

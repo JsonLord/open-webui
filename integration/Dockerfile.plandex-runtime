@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# Build fragment for a network-independent Plandex tokenizer cache. A mirror
+# may be supplied at build time; canonical SHA256 validation remains mandatory.
+FROM python:3.11-slim-bookworm AS plandex-tokenizer
+ARG TIKTOKEN_O200K_FETCH_URL="https://raw.githubusercontent.com/rmusser01/tldw_chatbook/b0dadf19414f5f8faf69b854d8e59007d275083e/tldw_chatbook/assets/tiktoken_cache/fb374d419588a4632f3f557e76b4b70aebbca790"
+ENV TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache
+WORKDIR /src
+RUN mkdir -p backend/open_webui/control_plane && touch backend/open_webui/__init__.py backend/open_webui/control_plane/__init__.py
+COPY backend/open_webui/control_plane/plandex_tokenizer.py /src/backend/open_webui/control_plane/plandex_tokenizer.py
+COPY scripts/integration/fetch-tiktoken-artifacts.py scripts/integration/
+ENV PYTHONPATH=/src/backend
+RUN TIKTOKEN_O200K_FETCH_URL="$TIKTOKEN_O200K_FETCH_URL" \
+    python scripts/integration/fetch-tiktoken-artifacts.py && \
+    chmod 0444 "$TIKTOKEN_CACHE_DIR/fb374d419588a4632f3f557e76b4b70aebbca790" && \
+    chmod 0555 "$TIKTOKEN_CACHE_DIR"
+
+FROM debian:bookworm-slim
+ENV TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache
+COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/tiktoken-cache

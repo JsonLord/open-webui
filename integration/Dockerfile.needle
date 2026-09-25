@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# Build fragment for the glibc x86_64 HF runtime. The unified image can copy
+# /root/.cache/cactus-needle and the installed Python packages from this stage.
+FROM python:3.11-slim-bookworm AS needle-runtime
+
+ARG NEEDLE_MODEL_REVISION
+ARG NEEDLE_MODEL_SHA256
+ARG NEEDLE_ENGINE_WHEEL_SHA256
+ARG NEEDLE_ENGINE_LIBRARY_SHA256=""
+
+ENV NEEDLE_MODEL_REVISION=${NEEDLE_MODEL_REVISION} \
+    NEEDLE_MODEL_SHA256=${NEEDLE_MODEL_SHA256} \
+    NEEDLE_ENGINE_WHEEL_SHA256=${NEEDLE_ENGINE_WHEEL_SHA256} \
+    NEEDLE_ENGINE_LIBRARY_SHA256=${NEEDLE_ENGINE_LIBRARY_SHA256} \
+    NEEDLE_TELEMETRY=0 \
+    DO_NOT_TRACK=1
+
+WORKDIR /app
+COPY integration/requirements.txt /tmp/integration-requirements.txt
+RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
+    uv pip install --system -r /tmp/integration-requirements.txt --no-cache-dir
+COPY integration /app/integration
+COPY scripts/integration/fetch-needle-artifacts.py /app/scripts/integration/fetch-needle-artifacts.py
+COPY scripts/integration/needle-preflight.py /app/scripts/integration/needle-preflight.py
+RUN --mount=type=secret,id=hf_token,required=false \
+    if [ -f /run/secrets/hf_token ]; then export HF_TOKEN="$(cat /run/secrets/hf_token)"; fi && \
+    python /app/scripts/integration/fetch-needle-artifacts.py && \
+    HF_HUB_OFFLINE=1 python /app/scripts/integration/needle-preflight.py

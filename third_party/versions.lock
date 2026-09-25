@@ -1,0 +1,51 @@
+{
+  "needle": {
+    "package": "cactus-needle==3.0.1",
+    "audited_source_sha": "42bf1f2d0a7784b0d4d1ec94bb5ade425cf9a67c",
+    "generation": 3,
+    "engine_version": "3.0.1",
+    "model_repo": "Cactus-Compute/needle3",
+    "model_revision": "0f51a1ac2917a03644c4cc7836f19476c6d177dd",
+    "model_file": "needle3.cact",
+    "model_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+    "engine_artifact": "python/cactus_needle-3.0.1-py3-none-manylinux2014_x86_64.whl",
+    "engine_member": "needle/libneedle3.so",
+    "engine_wheel_sha256": "05770ef9a85686583968ea15f62f9ad44217e078efdaa99559d3208bb8a369b0",
+    "engine_library_sha256": null,
+    "runtime_cache": "~/.cache/cactus-needle/v3/3.0.1"
+  },
+  "github_mcp_server": {
+    "repository": "github/github-mcp-server",
+    "version": "v1.12.2",
+    "revision": "85598ba6e1256f7ebf4867b95d63b833c4549264",
+    "go_version": "1.25.12",
+    "runtime_path": "/opt/integration/bin/github-mcp-server",
+    "integration": "external stdio process",
+    "toolsets": ["repos", "issues", "pull_requests", "actions"],
+    "read_only": true
+  },
+  "plandex_tiktoken": {
+    "dependency": "github.com/pkoukk/tiktoken-go",
+    "version": "v0.1.7",
+    "encoding": "o200k_base",
+    "canonical_url": "https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken",
+    "sha256": "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d",
+    "cache_key_sha1": "fb374d419588a4632f3f557e76b4b70aebbca790",
+    "runtime_cache_dir": "/opt/integration/tiktoken-cache",
+    "mirror": {
+      "repository": "rmusser01/tldw_chatbook",
+      "commit": "b0dadf19414f5f8faf69b854d8e59007d275083e",
+      "path": "tldw_chatbook/assets/tiktoken_cache/fb374d419588a4632f3f557e76b4b70aebbca790",
+      "transport_only": true
+    }
+  },
+  "graphify": {
+    "package": "graphifyy==0.9.67",
+    "repository": "Graphify-Labs/graphify",
+    "revision": "4c735618f3d56fd622c2049771584621c31ba9ff",
+    "tag": "v0.9.67",
+    "interface": "local CLI code-only extraction and graph.json",
+    "schema_version": "1",
+    "llm_enabled": false
+  }
+}

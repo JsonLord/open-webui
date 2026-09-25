@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.25.12-bookworm AS github-mcp-builder
+
+ARG GITHUB_MCP_VERSION=v1.12.2
+ARG GITHUB_MCP_REVISION=85598ba6e1256f7ebf4867b95d63b833c4549264
+
+RUN git clone --quiet https://github.com/github/github-mcp-server.git /src && \
+    git -C /src checkout --quiet --detach "${GITHUB_MCP_REVISION}" && \
+    test "$(git -C /src rev-parse HEAD)" = "${GITHUB_MCP_REVISION}"
+WORKDIR /src
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -X main.version=${GITHUB_MCP_VERSION} -X main.commit=${GITHUB_MCP_REVISION} -X main.date=deployment-build" \
+    -o /github-mcp-server ./cmd/github-mcp-server
+
+# This stage documents the deployable runtime artifact. A future unified image
+# copies only /opt/integration/bin/github-mcp-server from it; no Go toolchain.
+FROM debian:bookworm-slim AS github-mcp-runtime
+COPY --from=github-mcp-builder /github-mcp-server /opt/integration/bin/github-mcp-server
+RUN test -x /opt/integration/bin/github-mcp-server && \
+    /opt/integration/bin/github-mcp-server --version

@@ -1,0 +1,8 @@
+# Runtime dependency for the Phase 1 Plandex -> Headroom -> Spark path.
+# Keep this exact pin synchronized with docs/integration/DEPENDENCIES.md.
+headroom-ai[proxy]==0.37.0
+
+# Local Phase 2 tool-selection runtime. The base package is inference-only;
+# training extras are intentionally excluded.
+cactus-needle==3.0.1
+jsonschema==4.26.0

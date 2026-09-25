@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"plandex-cli/api"
@@ -16,6 +17,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
+
+var contextJSON bool
 
 var contextCmd = &cobra.Command{
 	Use:     "ls",
@@ -33,6 +36,20 @@ func listContext(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		term.OutputErrorAndExit("Error listing context: %v", err)
+	}
+	if contextJSON {
+		term.StopSpinner()
+		out := make([]map[string]interface{}, 0, len(contexts))
+		for _, context := range contexts {
+			out = append(out, map[string]interface{}{
+				"id": context.Id, "name": context.Name, "type": context.ContextType,
+				"filePath": context.FilePath, "numTokens": context.NumTokens,
+			})
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+			term.OutputErrorAndExit("Error encoding context: %v", err)
+		}
+		return
 	}
 
 	planConfig, err := api.Client.GetPlanConfig(lib.CurrentPlanId)
@@ -110,6 +127,7 @@ func listContext(cmd *cobra.Command, args []string) {
 }
 
 func init() {
+	contextCmd.Flags().BoolVar(&contextJSON, "json", false, "Output context as JSON")
 	RootCmd.AddCommand(contextCmd)
 
 }
