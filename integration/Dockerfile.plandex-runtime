@@ -7,7 +7,7 @@ ENV TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache
 WORKDIR /src
 RUN mkdir -p backend/open_webui/control_plane && touch backend/open_webui/__init__.py backend/open_webui/control_plane/__init__.py
 COPY backend/open_webui/control_plane/plandex_tokenizer.py /src/backend/open_webui/control_plane/plandex_tokenizer.py
-COPY scripts/integration/fetch-tiktoken-artifacts.py scripts/integration/
+COPY scripts/integration/fetch-tiktoken-artifacts.py scripts/integration/plandex_tokenizer_runtime.py scripts/integration/
 ENV PYTHONPATH=/src/backend
 RUN TIKTOKEN_O200K_FETCH_URL="$TIKTOKEN_O200K_FETCH_URL" \
     python scripts/integration/fetch-tiktoken-artifacts.py && \

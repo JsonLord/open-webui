@@ -1,5 +1,6 @@
 import hashlib
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,17 @@ from open_webui.control_plane.adapters import PlandexExecutor  # noqa: E402
 
 
 class PlandexTokenizerTests(unittest.TestCase):
+    def test_deployment_loader_does_not_import_web_application(self):
+        script = ROOT / 'scripts' / 'integration' / 'plandex_tokenizer_runtime.py'
+        statement = f"import runpy,sys; runpy.run_path({str(script)!r}); print('open_webui' in sys.modules)"
+        result = subprocess.run(
+            [sys.executable, '-I', '-c', statement],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.stdout.strip(), 'False')
+
     def test_canonical_cache_key_derivation(self):
         self.assertEqual(hashlib.sha1(tokenizer.CANONICAL_URL.encode()).hexdigest(), tokenizer.EXPECTED_CACHE_KEY)
         self.assertEqual(tokenizer.cache_key(), tokenizer.EXPECTED_CACHE_KEY)

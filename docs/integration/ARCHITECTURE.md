@@ -268,3 +268,6 @@ environment additionally sets the supported `GRAPHIFY_QUERY_LOG_DISABLE=1`.
 The structural queries in this implementation read the private graph artifact
 through the existing adapter, so no query string is sent to Graphify CLI or any
 remote service.
+
+### Phase 3H deployment preflight isolation
+Tokenizer acquisition and readiness load the dependency-free tokenizer contract directly from its source file. They intentionally do not import the `open_webui` package, so the PostgreSQL/Plandex supervisor tier does not acquire the web application's optional Python dependency surface. The 2026-09-25 fresh-runtime rerun reconfirmed native migrations, health, local auth, plan creation/current identity, and server-restart identity agreement.

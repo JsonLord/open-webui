@@ -7,9 +7,12 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
+from plandex_tokenizer_runtime import tokenizer
 
-from open_webui.control_plane.plandex_tokenizer import DEFAULT_CACHE_DIR, MIRROR_URL, fetch_and_install, preflight
+DEFAULT_CACHE_DIR = tokenizer.DEFAULT_CACHE_DIR
+MIRROR_URL = tokenizer.MIRROR_URL
+fetch_and_install = tokenizer.fetch_and_install
+preflight = tokenizer.preflight
 
 
 def main() -> int:

@@ -49,3 +49,6 @@
 **Current blocker:** the current container has no running Phase-3 Plandex/PostgreSQL runtime or persisted authenticated CLI home, so native `load`/`ls` verification could not complete. Spark, GitHub PAT, and Needle remain independent external boundaries.
 
 **Next recommended action:** rerun the native GraphContext `load --name` plus `ls --json` smoke in the prepared Phase-3 deployment; after it passes, begin Phase 5 JIT planning/checkpoints.
+
+### Phase 3H rerun (2026-09-25)
+Fresh PostgreSQL 16.15, freshly built native binaries, an empty dedicated database, a clean persistent CLI home, and the pinned tokenizer reconfirmed the existing `IMPLEMENTED + VERIFIED` Plandex statuses. Native first/repeat/recovery auth and `new`/`current --json` survived server restart with stable plan/project identity. The deployment tokenizer scripts were corrected to remain independent of Open WebUI application imports. Spark, GitHub authenticated reads, and Needle live inference remain `IMPLEMENTED — NOT RUNTIME VERIFIED`.
