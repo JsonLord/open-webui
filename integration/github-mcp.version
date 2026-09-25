@@ -1,0 +1,3 @@
+GITHUB_MCP_VERSION=v1.12.2
+GITHUB_MCP_REVISION=85598ba6e1256f7ebf4867b95d63b833c4549264
+GITHUB_MCP_MODULE=github.com/github/github-mcp-server/cmd/github-mcp-server

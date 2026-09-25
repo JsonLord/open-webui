@@ -26,6 +26,10 @@ type loadContextsParams struct {
 	autoLoaded       bool
 }
 
+func needsGeneratedContextName(context *shared.LoadContextParams) bool {
+	return (context.ContextType == shared.ContextPipedDataType || context.ContextType == shared.ContextNoteType) && context.Name == ""
+}
+
 func loadContexts(
 	params loadContextsParams,
 ) (*shared.LoadContextResponse, []*db.Context) {
@@ -93,7 +97,8 @@ func loadContexts(
 	var orgUserConfig *shared.OrgUserConfig
 
 	for _, context := range *loadReq {
-		if context.ContextType == shared.ContextPipedDataType || context.ContextType == shared.ContextNoteType || context.ContextType == shared.ContextImageType {
+		needsGeneratedName := needsGeneratedContextName(context)
+		if needsGeneratedName || context.ContextType == shared.ContextImageType {
 
 			settings, err = db.GetPlanSettings(plan)
 
@@ -144,7 +149,7 @@ func loadContexts(
 	num := 0
 	errCh := make(chan error, len(*loadReq))
 	for _, context := range *loadReq {
-		if context.ContextType == shared.ContextPipedDataType {
+		if context.ContextType == shared.ContextPipedDataType && context.Name == "" {
 			num++
 
 			go func(context *shared.LoadContextParams) {
@@ -176,7 +181,7 @@ func loadContexts(
 				context.Name = name
 				errCh <- nil
 			}(context)
-		} else if context.ContextType == shared.ContextNoteType {
+		} else if context.ContextType == shared.ContextNoteType && context.Name == "" {
 			num++
 
 			go func(context *shared.LoadContextParams) {

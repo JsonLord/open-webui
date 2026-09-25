@@ -41,6 +41,10 @@ func init() {
 	if err != nil {
 		term.OutputErrorAndExit(err.Error())
 	}
+	err = os.Chmod(HomePlandexDir, 0700)
+	if err != nil {
+		term.OutputErrorAndExit(err.Error())
+	}
 
 	CacheDir = filepath.Join(HomePlandexDir, "cache")
 	HomeAuthPath = filepath.Join(HomePlandexDir, "auth.json")

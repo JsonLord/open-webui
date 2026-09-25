@@ -1,0 +1,3 @@
+# Isolated Phase 4 runtime dependency. Do not merge into Open WebUI's Python
+# environment; build the dedicated runtime fragment instead.
+graphifyy==0.9.67

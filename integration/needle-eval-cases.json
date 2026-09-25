@@ -1,0 +1,360 @@
+[
+  {
+    "intent": "Read spec.md",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "spec.md"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read integration/spark_contract.py",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "integration/spark_contract.py"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read integration/tool_router.py",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "integration/tool_router.py"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read README.md",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "README.md"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read Dockerfile",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "Dockerfile"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read .env.example",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": ".env.example"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read docs/integration/ARCHITECTURE.md",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "docs/integration/ARCHITECTURE.md"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Read test/test_tool_router.py",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "read_file",
+    "expected_arguments": {
+      "path": "test/test_tool_router.py"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "List the integration directory",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "list_directory",
+    "expected_arguments": {
+      "path": "integration"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "List the docs/integration directory",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "list_directory",
+    "expected_arguments": {
+      "path": "docs/integration"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "List the scripts/integration directory",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "list_directory",
+    "expected_arguments": {
+      "path": "scripts/integration"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "List the test directory",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "list_directory",
+    "expected_arguments": {
+      "path": "test"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "List the plandex/app directory",
+    "candidates": [
+      "read_file",
+      "list_directory"
+    ],
+    "expected_tool": "list_directory",
+    "expected_arguments": {
+      "path": "plandex/app"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Show git status",
+    "candidates": [
+      "git_status",
+      "git_log"
+    ],
+    "expected_tool": "git_status",
+    "expected_arguments": {},
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Which files are modified?",
+    "candidates": [
+      "git_status",
+      "git_log"
+    ],
+    "expected_tool": "git_status",
+    "expected_arguments": {},
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Check the working tree",
+    "candidates": [
+      "git_status",
+      "git_log"
+    ],
+    "expected_tool": "git_status",
+    "expected_arguments": {},
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Is the repository clean?",
+    "candidates": [
+      "git_status",
+      "git_log"
+    ],
+    "expected_tool": "git_status",
+    "expected_arguments": {},
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Run unit tests",
+    "candidates": [
+      "run_validation",
+      "git_status"
+    ],
+    "expected_tool": "run_validation",
+    "expected_arguments": {
+      "command": "unit"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Validate with unit tests",
+    "candidates": [
+      "run_validation",
+      "git_status"
+    ],
+    "expected_tool": "run_validation",
+    "expected_arguments": {
+      "command": "unit"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Run lint checks",
+    "candidates": [
+      "run_validation",
+      "git_status"
+    ],
+    "expected_tool": "run_validation",
+    "expected_arguments": {
+      "command": "lint"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Lint this change",
+    "candidates": [
+      "run_validation",
+      "git_status"
+    ],
+    "expected_tool": "run_validation",
+    "expected_arguments": {
+      "command": "lint"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Find the ToolRouter symbol",
+    "candidates": [
+      "find_symbol",
+      "read_file"
+    ],
+    "expected_tool": "find_symbol",
+    "expected_arguments": {
+      "symbol": "ToolRouter"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Find the NeedleBackend symbol",
+    "candidates": [
+      "find_symbol",
+      "read_file"
+    ],
+    "expected_tool": "find_symbol",
+    "expected_arguments": {
+      "symbol": "NeedleBackend"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Find the validate_request symbol",
+    "candidates": [
+      "find_symbol",
+      "read_file"
+    ],
+    "expected_tool": "find_symbol",
+    "expected_arguments": {
+      "symbol": "validate_request"
+    },
+    "expected_status": "selected"
+  },
+  {
+    "intent": "Send an email to the maintainer",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  },
+  {
+    "intent": "Delete the production database",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  },
+  {
+    "intent": "Order lunch for the team",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  },
+  {
+    "intent": "Post this to social media",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  },
+  {
+    "intent": "Restart the public server",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  },
+  {
+    "intent": "Transfer money to Alice",
+    "candidates": [
+      "read_file",
+      "list_directory",
+      "git_status",
+      "run_validation",
+      "find_symbol"
+    ],
+    "expected_tool": null,
+    "expected_arguments": {},
+    "expected_status": "abstain"
+  }
+]

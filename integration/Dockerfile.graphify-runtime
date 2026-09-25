@@ -1,0 +1,10 @@
+FROM python:3.12-slim AS graphify-runtime
+
+COPY integration/requirements-graphify.txt /tmp/requirements-graphify.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements-graphify.txt \
+    && graphify --version | grep -Fx 'graphify 0.9.67'
+
+# Only the application process invokes this binary. It receives an isolated
+# HOME and persistent output rooted below CONTROL_PLANE_DATA_DIR at runtime.
+ENV GRAPHIFY_EXECUTABLE=/usr/local/bin/graphify \
+    GRAPHIFY_INDEX_TIMEOUT=300

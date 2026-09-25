@@ -77,7 +77,7 @@ func storeAccount(toStore *shared.ClientAccount) error {
 		return fmt.Errorf("error marshalling accounts: %v", err)
 	}
 
-	err = os.WriteFile(fs.HomeAccountsPath, bytes, os.ModePerm)
+	err = os.WriteFile(fs.HomeAccountsPath, bytes, 0600)
 
 	if err != nil {
 		return fmt.Errorf("error writing accounts: %v", err)
@@ -97,7 +97,7 @@ func writeCurrentAuth() error {
 		return fmt.Errorf("error marshalling auth: %v", err)
 	}
 
-	err = os.WriteFile(fs.HomeAuthPath, bytes, os.ModePerm)
+	err = os.WriteFile(fs.HomeAuthPath, bytes, 0600)
 
 	if err != nil {
 		return fmt.Errorf("error writing auth: %v", err)

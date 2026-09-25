@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"plandex-cli/fs"
 	"plandex-cli/term"
 
 	shared "plandex-shared"
@@ -123,6 +126,56 @@ func SignInWithCode(code, host string) error {
 	}
 
 	return handleSignInResponse(res, host)
+}
+
+// SignInLocal provisions or signs into the deterministic local-mode account
+// without prompting. The server remains authoritative for account, token, and
+// organization creation; this function only enters the existing native flows.
+func SignInLocal(host string) error {
+	if host == "" {
+		return fmt.Errorf("local host is required")
+	}
+
+	const email = "local-admin@plandex.ai"
+	term.StartSpinner("")
+	verification, apiErr := apiClient.CreateEmailVerification(email, host, "")
+	term.StopSpinner()
+	if apiErr != nil {
+		return fmt.Errorf("error verifying local server: %v", apiErr.Msg)
+	}
+	if !verification.IsLocalMode {
+		return fmt.Errorf("server did not confirm local mode")
+	}
+
+	if verification.HasAccount {
+		return signIn(email, "", host)
+	}
+	return createAccount(email, "", host, true)
+}
+
+// ValidateLocalAuth verifies persisted native auth against its configured
+// local server without creating a new session or printing credential data.
+func ValidateLocalAuth(host string) error {
+	bytes, err := os.ReadFile(fs.HomeAuthPath)
+	if err != nil {
+		return fmt.Errorf("local auth is unavailable: %v", err)
+	}
+	var persisted shared.ClientAuth
+	if err := json.Unmarshal(bytes, &persisted); err != nil {
+		return fmt.Errorf("local auth is invalid: %v", err)
+	}
+	if !persisted.IsLocalMode || persisted.Host != host || persisted.Token == "" {
+		return fmt.Errorf("persisted auth does not match the local host")
+	}
+	Current = &persisted
+	org, apiErr := apiClient.GetOrgSession()
+	if apiErr != nil {
+		return fmt.Errorf("local auth validation failed: %v", apiErr.Msg)
+	}
+	if org == nil || org.Id != persisted.OrgId {
+		return fmt.Errorf("local auth organization mismatch")
+	}
+	return nil
 }
 
 func promptInitialAuth() error {

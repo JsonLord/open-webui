@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"plandex-cli/api"
 	"plandex-cli/auth"
@@ -12,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var currentJSON bool
+
 var currentCmd = &cobra.Command{
 	Use:     "current",
 	Aliases: []string{"cu"},
@@ -21,6 +24,7 @@ var currentCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(currentCmd)
+	currentCmd.Flags().BoolVar(&currentJSON, "json", false, "Output stable current plan identity as JSON")
 }
 
 func current(cmd *cobra.Command, args []string) {
@@ -31,9 +35,13 @@ func current(cmd *cobra.Command, args []string) {
 		term.OutputNoCurrentPlanErrorAndExit()
 	}
 
-	term.StartSpinner("")
+	if !currentJSON {
+		term.StartSpinner("")
+	}
 	plan, err := api.Client.GetPlan(lib.CurrentPlanId)
-	term.StopSpinner()
+	if !currentJSON {
+		term.StopSpinner()
+	}
 
 	if err != nil {
 		term.OutputErrorAndExit("Error getting plan: %v", err)
@@ -48,6 +56,21 @@ func current(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		term.OutputErrorAndExit("Error getting current branches: %v", err)
+	}
+	if currentJSON {
+		branch := currentBranchesByPlanId[lib.CurrentPlanId]
+		branchName := lib.CurrentBranch
+		if branch != nil {
+			branchName = branch.Name
+		}
+		bytes, err := json.Marshal(map[string]string{
+			"planId": plan.Id, "planName": plan.Name, "projectId": plan.ProjectId, "branch": branchName,
+		})
+		if err != nil {
+			term.OutputErrorAndExit("Error encoding current plan: %v", err)
+		}
+		fmt.Println(string(bytes))
+		return
 	}
 
 	table := lib.GetCurrentPlanTable(plan, currentBranchesByPlanId, nil)
