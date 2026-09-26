@@ -3,6 +3,14 @@
 set -euo pipefail
 
 spark_load_env() {
+  : "${APP_PERSIST_ROOT:=/data/agent-platform}"
+  : "${PGDATA:=$APP_PERSIST_ROOT/postgres}"
+  : "${PLANDEX_BASE_DIR:=$APP_PERSIST_ROOT/plandex-server}"
+  : "${PLANDEX_CLI_HOME:=$APP_PERSIST_ROOT/plandex-cli}"
+  : "${GRAPHIFY_DATA_DIR:=$APP_PERSIST_ROOT/graphify}"
+  : "${CONTROL_PLANE_DATA_DIR:=$APP_PERSIST_ROOT/control-plane}"
+  : "${OPEN_WEBUI_DATA_DIR:=$APP_PERSIST_ROOT/open-webui}"
+
   : "${SPARK_BASE_URL:=https://leon4gr45-llama.hf.space/v1}"
   : "${HEADROOM_BASE_URL:=http://127.0.0.1:8787/v1}"
   : "${HEADROOM_HOST:=127.0.0.1}"
@@ -20,11 +28,11 @@ spark_load_env() {
   : "${SPARK_CONTRACT_HOST:=127.0.0.1}"
   : "${SPARK_CONTRACT_PORT:=8790}"
 
-  # SPARK_API_TOKEN is a temporary deployment-secret name. Headroom and
-  # Plandex use the canonical SPARK_API_KEY name internally.
   if [[ -z "${SPARK_API_KEY:-}" && -n "${SPARK_API_TOKEN:-}" ]]; then
     SPARK_API_KEY=$SPARK_API_TOKEN
   fi
+
+  export APP_PERSIST_ROOT PGDATA PLANDEX_BASE_DIR PLANDEX_CLI_HOME GRAPHIFY_DATA_DIR CONTROL_PLANE_DATA_DIR OPEN_WEBUI_DATA_DIR
   export SPARK_BASE_URL SPARK_MODEL HEADROOM_BASE_URL HEADROOM_HOST HEADROOM_PORT
   export SPARK_CONTEXT_LIMIT SPARK_MAX_INPUT_TOKENS SPARK_MAX_OUTPUT_TOKENS
   export SPARK_CONTEXT_RESERVE SPARK_TEMPERATURE SPARK_TOP_P
