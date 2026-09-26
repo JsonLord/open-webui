@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # deployment-smoke.sh - Deployment readiness check for Open WebUI runtime deployment
-# Verifies process inventory, public vs loopback port bindings, and service health.
+# Verifies process inventory, public vs loopback port bindings, storage volume, and service health.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -12,7 +12,32 @@ REPORT_PATH="${1:-${ROOT_DIR}/deployment-readiness-report.json}"
 echo "=== Open WebUI Single-Runtime Deployment Readiness Check ==="
 
 DEPLOYMENT_READY=true
-CRITICAL_OK=true
+
+# Storage volume check
+APP_PERSIST_ROOT="${APP_PERSIST_ROOT:-/data/agent-platform}"
+REQUIRE_PERSISTENT_STORAGE="${REQUIRE_PERSISTENT_STORAGE:-0}"
+
+echo "Checking storage volume..."
+STORAGE_OK=true
+if [ -d "$APP_PERSIST_ROOT" ]; then
+    if touch "$APP_PERSIST_ROOT/.write_test" 2>/dev/null; then
+        rm -f "$APP_PERSIST_ROOT/.write_test"
+        echo "[STORAGE] $APP_PERSIST_ROOT: WRITABLE OK"
+    else
+        echo "[STORAGE] $APP_PERSIST_ROOT: NOT WRITABLE"
+        STORAGE_OK=false
+    fi
+else
+    echo "[STORAGE] $APP_PERSIST_ROOT: ABSENT"
+    if [ "$REQUIRE_PERSISTENT_STORAGE" = "1" ]; then
+        STORAGE_OK=false
+    fi
+fi
+
+if [ "$REQUIRE_PERSISTENT_STORAGE" = "1" ] && [ "$STORAGE_OK" = "false" ]; then
+    echo "[STORAGE] ERROR: Persistent storage required but unavailable!"
+    DEPLOYMENT_READY=false
+fi
 
 # Function to check port binding
 check_port_binding() {
@@ -68,10 +93,10 @@ PLANDEX_PORT_OK=false
 HEADROOM_PORT_OK=false
 SPARK_ADAPTER_PORT_OK=false
 
-if check_port_binding 7860 "public" "Open WebUI"; then OPEN_WEBUI_PORT_OK=true; fi
-if check_port_binding 8099 "loopback" "Plandex"; then PLANDEX_PORT_OK=true; fi
-if check_port_binding 8787 "loopback" "Headroom"; then HEADROOM_PORT_OK=true; fi
-if check_port_binding 8790 "loopback" "Spark Adapter"; then SPARK_ADAPTER_PORT_OK=true; fi
+if check_port_binding 7860 "public" "Open WebUI"; then OPEN_WEBUI_PORT_OK=true; else DEPLOYMENT_READY=false; fi
+if check_port_binding 8099 "loopback" "Plandex"; then PLANDEX_PORT_OK=true; else DEPLOYMENT_READY=false; fi
+if check_port_binding 8787 "loopback" "Headroom"; then HEADROOM_PORT_OK=true; else DEPLOYMENT_READY=false; fi
+if check_port_binding 8790 "loopback" "Spark Adapter"; then SPARK_ADAPTER_PORT_OK=true; else DEPLOYMENT_READY=false; fi
 
 PORT_SAFETY_OK=false
 if check_unexpected_public_listeners; then PORT_SAFETY_OK=true; else DEPLOYMENT_READY=false; fi
@@ -91,6 +116,11 @@ cat <<EOF > "$REPORT_PATH"
 {
   "deployment_ready": $DEPLOYMENT_READY,
   "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "storage": {
+    "app_persist_root": "$APP_PERSIST_ROOT",
+    "require_persistent": $REQUIRE_PERSISTENT_STORAGE,
+    "ok": $STORAGE_OK
+  },
   "critical": {
     "open_webui_port_7860": $OPEN_WEBUI_PORT_OK,
     "plandex_port_8099": $PLANDEX_PORT_OK,
@@ -106,9 +136,13 @@ cat <<EOF > "$REPORT_PATH"
     "public_contract_ok": $PORT_SAFETY_OK
   },
   "persistence": {
-    "postgres": "/var/lib/postgresql/data",
-    "plandex": "~/.plandex",
-    "control_plane": "backend/open_webui/data"
+    "postgres": "$APP_PERSIST_ROOT/postgres",
+    "plandex_server": "$APP_PERSIST_ROOT/plandex-server",
+    "plandex_cli": "$APP_PERSIST_ROOT/plandex-cli",
+    "open_webui": "$APP_PERSIST_ROOT/open-webui",
+    "control_plane": "$APP_PERSIST_ROOT/control-plane",
+    "repositories": "$APP_PERSIST_ROOT/repositories",
+    "graphify": "$APP_PERSIST_ROOT/graphify"
   }
 }
 EOF
@@ -121,5 +155,5 @@ if [ "$DEPLOYMENT_READY" = "true" ]; then
     exit 0
 else
     echo "=== Deployment Check FAILED or DEGRADED ==="
-    exit 0
+    exit 1
 fi

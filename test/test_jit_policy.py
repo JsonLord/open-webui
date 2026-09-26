@@ -5,6 +5,7 @@ from unittest import mock
 from open_webui.control_plane.adapters import JITPlanner, PlandexExecutor
 from open_webui.control_plane.domain import (
     AutonomyLevel,
+    CheckpointType,
     JITContextPolicy,
     JITDecision,
     JITExecutionPolicy,
@@ -32,6 +33,27 @@ class JITPolicyTests(unittest.TestCase):
         self.assertEqual(decision.task_class, TaskClass.UNKNOWN)
         self.assertEqual(decision.execution_policy.max_replans, 0)
         self.assertIn('conservative Plandex defaults', decision.plan_seed)
+
+    def test_markdown_code_block_json_parsing(self):
+        markdown_text = "```json\n{\"decision_id\": \"jit-1\", \"task_class\": \"bug_fix\"}\n```"
+        extracted = self.planner._extract_json(markdown_text)
+        self.assertEqual(extracted['decision_id'], 'jit-1')
+        self.assertEqual(extracted['task_class'], 'bug_fix')
+
+    def test_checkpoint_evaluation_and_replan(self):
+        eval_cont = self.planner.evaluate_checkpoint(self.context, CheckpointType.PLAN_READY, {})
+        self.assertEqual(eval_cont, 'CONTINUE')
+
+        eval_replan = self.planner.evaluate_checkpoint(self.context, CheckpointType.SCOPE_CHANGED, {})
+        self.assertEqual(eval_replan, 'REPLAN')
+
+        fallback = self.planner.fallback_decision(self.context)
+        fallback_replan = self.planner.replan(self.context, fallback, 'scope_expanded')
+        self.assertTrue(fallback_replan.decision_id.startswith('fallback-'))
+
+        mock_planner = JITPlanner(base_url='http://127.0.0.1:9999', api_key='secret')
+        mock_replan = mock_planner.replan(self.context, fallback, 'scope_expanded')
+        self.assertTrue(mock_replan.decision_id.startswith('replan-'))
 
     def test_schema_validation_and_budget_clamping(self):
         raw_json = {

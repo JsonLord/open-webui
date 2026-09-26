@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import os
 import shutil
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+APP_PERSIST_ROOT = Path(os.getenv('APP_PERSIST_ROOT', '/data/agent-platform'))
 
 
 def _needle_status():
@@ -11,6 +17,41 @@ def _needle_status():
         return runtime_status()
     except ImportError:
         return {'loaded': False, 'runtime_verified': False}
+
+
+def warmup_litellm_worker(base_url: str = 'http://127.0.0.1:8787', timeout: int = 15) -> dict:
+    """Proactively warm LiteLLM / Headroom worker during startup to prevent cold-start timeout."""
+    try:
+        req = urllib.request.Request(f'{base_url.rstrip("/")}/health', headers={'User-Agent': 'control-plane-preflight'})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {'warmed': True, 'status_code': resp.status}
+    except Exception as exc:
+        return {'warmed': False, 'error': str(exc)}
+
+
+def check_storage_precheck() -> dict:
+    require_persistent = os.getenv('REQUIRE_PERSISTENT_STORAGE', '0') == '1'
+    root_exists = APP_PERSIST_ROOT.exists()
+    root_writable = False
+
+    if root_exists:
+        try:
+            test_file = APP_PERSIST_ROOT / '.write_test'
+            test_file.touch()
+            test_file.unlink()
+            root_writable = True
+        except Exception:
+            root_writable = False
+
+    ok = root_writable if require_persistent else True
+    return {
+        'ok': ok,
+        'persistent_expected': require_persistent,
+        'root_path': str(APP_PERSIST_ROOT),
+        'exists': root_exists,
+        'writable': root_writable,
+        'mode': 'persistent' if root_writable else ('ephemeral' if not require_persistent else 'unavailable'),
+    }
 
 
 ARTIFACT_MANIFEST = {
@@ -24,10 +65,14 @@ ARTIFACT_MANIFEST = {
 
 PERSISTENCE_MAP = {
     'must_persist': [
-        '/var/lib/postgresql/data',
-        '~/.plandex',
-        'backend/open_webui/data',
-        '/tmp/graphify-indexes',
+        f'{APP_PERSIST_ROOT}/postgres',
+        f'{APP_PERSIST_ROOT}/plandex-server',
+        f'{APP_PERSIST_ROOT}/plandex-cli',
+        f'{APP_PERSIST_ROOT}/open-webui',
+        f'{APP_PERSIST_ROOT}/control-plane',
+        f'{APP_PERSIST_ROOT}/repositories',
+        f'{APP_PERSIST_ROOT}/graphify',
+        f'{APP_PERSIST_ROOT}/runtime-state',
     ],
     'may_rebuild': [
         '/tmp/graphify-staging',
@@ -42,10 +87,19 @@ PERSISTENCE_MAP = {
 
 def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
     needle = _needle_status()
+    litellm_warmup = warmup_litellm_worker()
+    storage = check_storage_precheck()
+
     state = {
+        'storage': storage,
         'postgresql': {'configured': bool(os.getenv('DATABASE_URL')), 'reachable': False, 'runtime_verified': False},
         'plandex': {'configured': bool(shutil.which('plandex')), 'reachable': False, 'runtime_verified': False},
-        'headroom': {'configured': bool(os.getenv('HEADROOM_BASE_URL')), 'reachable': False, 'runtime_verified': False},
+        'headroom': {
+            'configured': bool(os.getenv('HEADROOM_BASE_URL')),
+            'reachable': False,
+            'runtime_verified': False,
+            'litellm_warmed': litellm_warmup['warmed'],
+        },
         'spark_contract': {
             'configured': bool(os.getenv('SPARK_BASE_URL')),
             'reachable': False,
@@ -91,9 +145,8 @@ def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
         state.setdefault(key, {}).update(value)
 
     critical_local = {'postgresql', 'plandex', 'git'}
-    optional_or_remote = {'graphify', 'jit', 'headroom', 'spark_contract', 'needle', 'github_mcp', 'gh'}
 
-    critical_ok = all(state[name]['configured'] and state[name]['reachable'] for name in critical_local if name in state)
+    critical_ok = storage['ok'] and all(state[name]['configured'] and state[name]['reachable'] for name in critical_local if name in state)
 
     return {
         'ok': critical_ok,
