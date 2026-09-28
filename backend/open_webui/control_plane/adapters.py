@@ -216,9 +216,12 @@ class PlandexExecutor:
             child_env['HOME'] = cli_home
             child_env.setdefault('PLANDEX_ENV', 'development')
             child_env.setdefault('PLANDEX_API_HOST', 'http://127.0.0.1:8099')
+        plandex_cache = child_env.get('PLANDEX_TIKTOKEN_CACHE_DIR')
+        if plandex_cache:
+            child_env['TIKTOKEN_CACHE_DIR'] = plandex_cache
         should_preflight = self.require_tokenizer
         if should_preflight is None:
-            should_preflight = bool(child_env.get('TIKTOKEN_CACHE_DIR'))
+            should_preflight = bool(plandex_cache)
         if should_preflight:
             try:
                 tokenizer_preflight(child_env.get('TIKTOKEN_CACHE_DIR'))

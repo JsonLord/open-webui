@@ -104,7 +104,7 @@ browser -> Open WebUI 0.0.0.0:7860
        Remote Spark (SPARK_BASE_URL)
 ```
 
-The current architecture includes local Needle3 contracts, GitHub MCP, Graphify, and JIT long-horizon policy planning.
+The current architecture includes local Needle3 contracts, GitHub MCP, Graphify, and JIT long-horizon policy planning. These are degraded capabilities rather than baseline deployment-readiness dependencies: persistent storage (when required), PostgreSQL, Plandex server/tokenizer/native auth, and Open WebUI/Control Plane remain the critical local startup boundary. Headroom and the Spark contract adapter start only when Spark credentials and an endpoint are configured; their absence or failed probe is reported without preventing the baseline UI and Plandex runtime from starting.
 Phase 6 adds Open Code Review and remote MiniCPM without moving Plandex's execution responsibilities into the control plane.
 Runtime state and model caches live outside user Git worktrees. Only port 7860 is exposed publicly.
 

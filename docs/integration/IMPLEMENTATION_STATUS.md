@@ -44,3 +44,14 @@
 **Current phase:** Phase 5D HuggingFace Deployment Closure complete.
 
 **Next recommended task:** Deploy baseline HF Space and perform post-deployment smoke. Then proceed to Phase 6 Open Code Review + remote MiniCPM review/repair.
+
+## Deployment readiness criticality
+
+`deployment_ready` is determined only by required persistent storage, PostgreSQL,
+the Plandex server, the pinned Plandex tokenizer, native Plandex authentication,
+Open WebUI/Control Plane, and the public-listener safety contract. Graphify,
+Needle, Headroom/Spark, remote Spark, JIT, and authenticated GitHub access are
+reported as degraded capabilities (`ready`, `unavailable`, `failed`, or
+`not_configured`) and never prevent the baseline UI and Plandex runtime from
+starting. Headroom and the Spark adapter are started only when both
+`SPARK_API_KEY` and `SPARK_BASE_URL` are configured.

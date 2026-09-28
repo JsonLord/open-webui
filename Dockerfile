@@ -111,7 +111,7 @@ ENV PYTHONUNBUFFERED=1
 
 ## Basis ##
 ENV ENV=prod \
-    PORT=8080 \
+    PORT=7860 \
     # pass build args to the build
     USE_OLLAMA_DOCKER=${USE_OLLAMA} \
     USE_CUDA_DOCKER=${USE_CUDA} \
@@ -181,7 +181,7 @@ RUN if [ "$USE_SLIM" = "true" ] && { [ "$USE_CUDA" = "true" ] || [ "$USE_OLLAMA"
 # Install PostgreSQL server runtime for single-container deployment
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl jq ca-certificates procps postgresql postgresql-contrib \
+    curl jq ca-certificates procps iproute2 postgresql postgresql-contrib \
     && if [ "$USE_SLIM" != "true" ]; then \
     apt-get install -y --no-install-recommends \
     git build-essential pandoc gcc libmariadb-dev ffmpeg libsm6 libxext6; \
@@ -205,7 +205,9 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     # fix: pin torch<=2.9.1 - torch 2.10.0 aarch64 wheels cause SIGILL on ARM devices (RPi 4 Cortex-A72) #21349
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
-    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt --no-cache-dir; \
+    uv venv /opt/integration/graphify-venv; \
+    uv pip install --python /opt/integration/graphify-venv/bin/python -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')"; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')"; \
     python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
@@ -213,7 +215,9 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     else \
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
-    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt --no-cache-dir; \
+    uv venv /opt/integration/graphify-venv; \
+    uv pip install --python /opt/integration/graphify-venv/bin/python -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     if [ "$USE_SLIM" != "true" ]; then \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')" || true; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')" || true; \
@@ -260,6 +264,18 @@ COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/t
 COPY integration /app/integration
 COPY scripts /app/scripts
 COPY AGENTS.md /app/AGENTS.md
+COPY plandex/app/server/migrations /opt/integration/plandex-server/migrations
+
+# The distro-supported PostgreSQL runtime in Debian bookworm is PostgreSQL 15.
+# Keep the server work tree immutable and all component state under APP_PERSIST_ROOT.
+ENV PG_MAJOR=15 \
+    PORT=7860 \
+    PLANDEX_TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache \
+    PLANDEX_SERVER_WORK_DIR=/opt/integration/plandex-server \
+    GRAPHIFY_EXECUTABLE=/opt/integration/graphify-venv/bin/graphify
+
+RUN chmod 0755 /app/scripts/integration/*.sh && \
+    test -d /opt/integration/plandex-server/migrations
 
 # Fetch Needle runtime artifacts and perform offline preflight during build
 RUN --mount=type=secret,id=hf_token,required=false \
@@ -272,11 +288,19 @@ RUN test -x /opt/integration/bin/plandex && \
     test -x /opt/integration/bin/plandex-server && \
     test -x /opt/integration/bin/github-mcp-server && \
     test -f /opt/integration/tiktoken-cache/fb374d419588a4632f3f557e76b4b70aebbca790 && \
+    TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache python /app/scripts/integration/plandex-tokenizer-preflight.py && \
+    test -x /opt/integration/graphify-venv/bin/graphify && \
+    test "$(/opt/integration/graphify-venv/bin/graphify --version)" = "graphify 0.9.67" && \
+    HF_HUB_OFFLINE=1 python /app/scripts/integration/needle-preflight.py && \
+    test -x /app/scripts/integration/supervisor.sh && \
     test -f /app/integration/deployment-artifacts.json && \
     test -x /app/scripts/integration/deployment-smoke.sh && \
+    PG_BINDIR="$(pg_config --bindir)" && \
+    test -x "$PG_BINDIR/initdb" && test -x "$PG_BINDIR/pg_ctl" && \
+    test "$("$PG_BINDIR/postgres" --version | awk '{print $3}' | cut -d. -f1)" = "$PG_MAJOR" && \
     echo "=== BUILD PROOF: All deployment artifacts and binaries successfully verified ==="
 
-EXPOSE 7860 8080
+EXPOSE 7860
 
 HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-7860}/health | jq -ne 'input.status == true' || exit 1
 

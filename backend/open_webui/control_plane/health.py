@@ -65,9 +65,9 @@ ARTIFACT_MANIFEST = {
 
 PERSISTENCE_MAP = {
     'must_persist': [
-        f'{APP_PERSIST_ROOT}/postgres',
-        f'{APP_PERSIST_ROOT}/plandex-server',
-        f'{APP_PERSIST_ROOT}/plandex-cli',
+        f'{APP_PERSIST_ROOT}/pgdata',
+        f'{APP_PERSIST_ROOT}/plandex/server',
+        f'{APP_PERSIST_ROOT}/plandex/cli',
         f'{APP_PERSIST_ROOT}/open-webui',
         f'{APP_PERSIST_ROOT}/control-plane',
         f'{APP_PERSIST_ROOT}/repositories',
@@ -87,8 +87,9 @@ PERSISTENCE_MAP = {
 
 def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
     needle = _needle_status()
-    litellm_warmup = warmup_litellm_worker()
     storage = check_storage_precheck()
+    spark_configured = bool(os.getenv('SPARK_API_KEY') and os.getenv('SPARK_BASE_URL'))
+    litellm_warmup = warmup_litellm_worker() if spark_configured else {'warmed': False}
 
     state = {
         'storage': storage,
@@ -101,7 +102,7 @@ def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
             'litellm_warmed': litellm_warmup['warmed'],
         },
         'spark_contract': {
-            'configured': bool(os.getenv('SPARK_BASE_URL')),
+            'configured': spark_configured,
             'reachable': False,
             'runtime_verified': False,
         },
@@ -144,13 +145,40 @@ def aggregate_health(probes: dict[str, dict] | None = None) -> dict:
     for key, value in (probes or {}).items():
         state.setdefault(key, {}).update(value)
 
-    critical_local = {'postgresql', 'plandex', 'git'}
+    critical = {
+        'storage': 'ready' if storage['ok'] else 'failed',
+        'postgres': 'ready' if state['postgresql']['reachable'] else 'failed',
+        'plandex': 'ready' if state['plandex']['reachable'] else 'failed',
+        'tokenizer': 'ready' if state.get('tokenizer', {}).get('runtime_verified') else 'failed',
+        'plandex_auth': 'ready' if state.get('plandex_auth', {}).get('runtime_verified') else 'failed',
+        'open_webui': 'ready' if state.get('open_webui', {}).get('reachable') else 'failed',
+    }
+    critical_ok = all(value == 'ready' for value in critical.values())
 
-    critical_ok = storage['ok'] and all(state[name]['configured'] and state[name]['reachable'] for name in critical_local if name in state)
+    def optional_state(name: str) -> str:
+        component = state[name]
+        if not component.get('configured'):
+            return 'not_configured'
+        if component.get('runtime_verified') or component.get('reachable'):
+            return 'ready'
+        return 'unavailable'
+
+    degraded = {
+        'graphify': optional_state('graphify'),
+        'needle': optional_state('needle'),
+        'spark': optional_state('spark_contract'),
+        'jit': optional_state('jit'),
+        'github_authenticated': (
+            'ready' if state['github_mcp']['authenticated'] else 'not_configured'
+        ),
+    }
 
     return {
         'ok': critical_ok,
+        'deployment_ready': critical_ok,
         'critical_local_ok': critical_ok,
+        'critical': critical,
+        'degraded': degraded,
         'components': state,
         'artifact_manifest': ARTIFACT_MANIFEST,
         'persistence_map': PERSISTENCE_MAP,
