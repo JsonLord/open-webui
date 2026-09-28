@@ -23,6 +23,45 @@ ARG BUILD_HASH=dev-build
 ARG UID=0
 ARG GID=0
 
+######## Integration Go Binaries Builder ########
+FROM golang:1.23-bookworm AS integration-go-builder
+WORKDIR /src
+COPY plandex /src/plandex
+COPY scripts/integration /src/scripts/integration
+COPY integration /src/integration
+
+# Build Plandex CLI
+RUN cd /src/plandex/app/cli && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /opt/integration/bin/plandex .
+
+# Build Plandex Server
+RUN cd /src/plandex/app/server && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /opt/integration/bin/plandex-server .
+
+# Build GitHub MCP Server
+ARG GITHUB_MCP_VERSION=v1.12.2
+ARG GITHUB_MCP_REVISION=85598ba6e1256f7ebf4867b95d63b833c4549264
+RUN git clone --quiet https://github.com/github/github-mcp-server.git /tmp/github-mcp && \
+    git -C /tmp/github-mcp checkout --quiet --detach "${GITHUB_MCP_REVISION}" && \
+    cd /tmp/github-mcp && \
+    CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -X main.version=${GITHUB_MCP_VERSION} -X main.commit=${GITHUB_MCP_REVISION} -X main.date=deployment-build" \
+    -o /opt/integration/bin/github-mcp-server ./cmd/github-mcp-server
+
+######## Integration Tiktoken Cache Builder ########
+FROM python:3.11-slim-bookworm AS plandex-tokenizer
+ARG TIKTOKEN_O200K_FETCH_URL="https://raw.githubusercontent.com/rmusser01/tldw_chatbook/b0dadf19414f5f8faf69b854d8e59007d275083e/tldw_chatbook/assets/tiktoken_cache/fb374d419588a4632f3f557e76b4b70aebbca790"
+ENV TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache
+WORKDIR /src
+RUN mkdir -p backend/open_webui/control_plane && touch backend/open_webui/__init__.py backend/open_webui/control_plane/__init__.py
+COPY backend/open_webui/control_plane/plandex_tokenizer.py /src/backend/open_webui/control_plane/plandex_tokenizer.py
+COPY scripts/integration/fetch-tiktoken-artifacts.py scripts/integration/plandex_tokenizer_runtime.py scripts/integration/
+ENV PYTHONPATH=/src/backend
+RUN TIKTOKEN_O200K_FETCH_URL="$TIKTOKEN_O200K_FETCH_URL" \
+    python scripts/integration/fetch-tiktoken-artifacts.py && \
+    chmod 0444 "$TIKTOKEN_CACHE_DIR/fb374d419588a4632f3f557e76b4b70aebbca790" && \
+    chmod 0555 "$TIKTOKEN_CACHE_DIR"
+
 ######## WebUI frontend ########
 FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build
 ARG BUILD_HASH
@@ -139,9 +178,10 @@ RUN if [ "$USE_SLIM" = "true" ] && { [ "$USE_CUDA" = "true" ] || [ "$USE_OLLAMA"
 
 # Keep the slim runtime free of local document/audio processing tools.
 # Git-based tool requirements require the standard image.
+# Install PostgreSQL server runtime for single-container deployment
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl jq ca-certificates \
+    curl jq ca-certificates procps postgresql postgresql-contrib \
     && if [ "$USE_SLIM" != "true" ]; then \
     apt-get install -y --no-install-recommends \
     git build-essential pandoc gcc libmariadb-dev ffmpeg libsm6 libxext6; \
@@ -149,8 +189,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends zstd; \
     fi && rm -rf /var/lib/apt/lists/*
 
-# install python dependencies
+# install python dependencies including integration requirements
 COPY --chown=$UID:$GID ./backend/requirements*.txt ./
+COPY --chown=$UID:$GID ./integration/requirements*.txt /tmp/integration/
 
 # Set UV_LINK_MODE to copy to prevent 0-byte file corruption in QEMU arm64 cross-builds
 ENV UV_LINK_MODE=copy
@@ -164,6 +205,7 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     # fix: pin torch<=2.9.1 - torch 2.10.0 aarch64 wheels cause SIGILL on ARM devices (RPi 4 Cortex-A72) #21349
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')"; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')"; \
     python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
@@ -171,6 +213,7 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     else \
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     if [ "$USE_SLIM" != "true" ]; then \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')" || true; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')" || true; \
@@ -207,9 +250,35 @@ COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 # copy backend files with the ownership and static permissions prepared above
 COPY --from=build /app/backend .
 
-EXPOSE 8080
+# Copy compiled Go integration binaries from builder
+COPY --from=integration-go-builder /opt/integration/bin /opt/integration/bin
 
-HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-8080}/health | jq -ne 'input.status == true' || exit 1
+# Copy pre-fetched tiktoken cache
+COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/tiktoken-cache
+
+# Copy integration components, scripts, and AGENTS.md
+COPY integration /app/integration
+COPY scripts /app/scripts
+COPY AGENTS.md /app/AGENTS.md
+
+# Fetch Needle runtime artifacts and perform offline preflight during build
+RUN --mount=type=secret,id=hf_token,required=false \
+    if [ -f /run/secrets/hf_token ]; then export HF_TOKEN="$(cat /run/secrets/hf_token)"; fi && \
+    python /app/scripts/integration/fetch-needle-artifacts.py && \
+    HF_HUB_OFFLINE=1 python /app/scripts/integration/needle-preflight.py
+
+# Build-time deterministic artifact and binary verification
+RUN test -x /opt/integration/bin/plandex && \
+    test -x /opt/integration/bin/plandex-server && \
+    test -x /opt/integration/bin/github-mcp-server && \
+    test -f /opt/integration/tiktoken-cache/fb374d419588a4632f3f557e76b4b70aebbca790 && \
+    test -f /app/integration/deployment-artifacts.json && \
+    test -x /app/scripts/integration/deployment-smoke.sh && \
+    echo "=== BUILD PROOF: All deployment artifacts and binaries successfully verified ==="
+
+EXPOSE 7860 8080
+
+HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-7860}/health | jq -ne 'input.status == true' || exit 1
 
 # Minimal, atomic permission hardening for OpenShift (arbitrary UID):
 # - Group 0 owns /app and /root
@@ -228,4 +297,4 @@ ARG BUILD_HASH
 ENV WEBUI_BUILD_VERSION=${BUILD_HASH}
 ENV DOCKER=true
 
-CMD [ "bash", "start.sh"]
+CMD [ "/app/scripts/integration/supervisor.sh" ]
