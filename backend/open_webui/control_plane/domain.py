@@ -48,6 +48,121 @@ class InvalidTransition(ValueError):
     pass
 
 
+# JIT Taxonomy & Constants
+class TaskClass(StrEnum):
+    BUG_FIX = 'bug_fix'
+    SMALL_FEATURE = 'small_feature'
+    REFACTOR = 'refactor'
+    TEST_CHANGE = 'test_change'
+    DOCUMENTATION = 'documentation'
+    DEPENDENCY_CHANGE = 'dependency_change'
+    ARCHITECTURE_CHANGE = 'architecture_change'
+    INVESTIGATION = 'investigation'
+    UNKNOWN = 'unknown'
+
+
+class AutonomyLevel(StrEnum):
+    LOW = 'LOW'
+    MEDIUM = 'MEDIUM'
+    HIGH = 'HIGH'
+
+
+class CheckpointType(StrEnum):
+    PLAN_READY = 'PLAN_READY'
+    SEGMENT_COMPLETE = 'SEGMENT_COMPLETE'
+    VALIDATING_COMPLETE = 'VALIDATING_COMPLETE'
+    VALIDATION_FAILED = 'VALIDATION_FAILED'
+    SCOPE_CHANGED = 'SCOPE_CHANGED'
+    TOOL_FAILURE_THRESHOLD = 'TOOL_FAILURE_THRESHOLD'
+    NEEDLE_ABSTAINED = 'NEEDLE_ABSTAINED'
+    UNEXPECTED_DEPENDENCY = 'UNEXPECTED_DEPENDENCY'
+    ARCHITECTURE_CHANGE = 'ARCHITECTURE_CHANGE'
+    PENDING_DIFF_READY = 'PENDING_DIFF_READY'
+    EXECUTION_BLOCKED = 'EXECUTION_BLOCKED'
+
+
+# Hard server-side ceilings
+JIT_HARD_CEILINGS = {
+    'max_replans': 3,
+    'max_execution_segments': 8,
+    'max_validation_failures': 3,
+    'max_tool_failures': 4,
+    'max_scope_expansions': 2,
+    'max_graph_escalations': 2,
+    'max_strategy_bytes': 8192,
+    'max_strategy_estimated_tokens': 2000,
+}
+
+
+@dataclass(frozen=True)
+class JITTaskContext:
+    task_id: str
+    repository: str
+    base_revision: str
+    objective: str
+    acceptance_criteria: tuple[str, ...] = ()
+    task_source: str = 'user_prompt'
+    labels: tuple[str, ...] = ()
+    explicit_paths: tuple[str, ...] = ()
+    explicit_symbols: tuple[str, ...] = ()
+    graph_summary: dict[str, Any] = field(default_factory=dict)
+    graph_context_metadata: dict[str, Any] = field(default_factory=dict)
+    repository_summary: dict[str, Any] = field(default_factory=dict)
+    task_history_summary: dict[str, Any] = field(default_factory=dict)
+    current_phase: str = 'planning'
+    prior_failures: tuple[str, ...] = ()
+    validation_status: str = 'not_started'
+    pending_diff_summary: dict[str, Any] = field(default_factory=dict)
+    resource_usage: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class JITScopePolicy:
+    expected_files: tuple[str, ...] = ()
+    expected_subsystems: tuple[str, ...] = ()
+    risk: str = 'low'
+
+
+@dataclass(frozen=True)
+class JITExecutionPolicy:
+    autonomy: AutonomyLevel = AutonomyLevel.MEDIUM
+    max_iterations: int = 5
+    max_replans: int = 3
+    max_validation_cycles: int = 3
+    max_tool_failures: int = 4
+
+
+@dataclass(frozen=True)
+class JITContextPolicy:
+    use_graph_context: bool = True
+    graph_escalation: bool = False
+    additional_context_needed: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class JITValidationPolicy:
+    required_profiles: tuple[str, ...] = ('standard',)
+    validation_frequency: str = 'checkpoint'
+
+
+@dataclass(frozen=True)
+class JITDecision:
+    decision_id: str
+    task_class: TaskClass
+    scope: JITScopePolicy
+    execution_policy: JITExecutionPolicy
+    context_policy: JITContextPolicy
+    validation_policy: JITValidationPolicy
+    checkpoints: tuple[str, ...] = ()
+    stop_conditions: tuple[str, ...] = ()
+    escalation_conditions: tuple[str, ...] = ()
+    plan_seed: str = ''
+    rationale_summary: str = ''
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 @dataclass
 class CodingTask:
     repository: str
@@ -88,6 +203,14 @@ class CodingTask:
     last_error: str | None = None
     review_status: str = 'not_started'
     repair_cycles: int = 0
+    jit_decision_id: str | None = None
+    jit_strategy_hash: str | None = None
+    jit_task_class: str | None = None
+    jit_autonomy: str | None = None
+    jit_replan_count: int = 0
+    jit_segment_number: int = 1
+    jit_last_checkpoint: str | None = None
+    jit_strategy_context_status: str = 'not_started'
 
     def transition(self, target: TaskState) -> None:
         if target not in TRANSITIONS.get(self.state, set()):

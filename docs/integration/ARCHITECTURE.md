@@ -9,7 +9,7 @@ two applications.
 
 Open WebUI consists of the Svelte frontend under `src/`, the FastAPI backend
 under `backend/open_webui/`, and its existing Docker build. The normal image
-listens on port 8080 and uses Open WebUI's own persistence configuration.
+listens on port 8080 (or 7860 in deployment) and uses Open WebUI's own persistence configuration.
 Plandex retains its Go CLI, server, shared packages, migrations, and PostgreSQL
 Docker Compose setup under `plandex/app/`.
 
@@ -84,7 +84,7 @@ classification **A (still useful)** and unrelated to the coding-worker baseline.
 browser -> Open WebUI 0.0.0.0:7860
               |
               v
-       Control Plane (future)
+       Control Plane (TaskService & JITPlanner)
           |             |
           |             +-> ToolRouter -> local Needle3
           |                    |
@@ -104,11 +104,9 @@ browser -> Open WebUI 0.0.0.0:7860
        Remote Spark (SPARK_BASE_URL)
 ```
 
-The current architecture includes local Needle3 contracts, GitHub MCP, and the
-Phase 4 Graphify foundation. Later phases add JIT/cloud planning, Open Code
-Review, and remote MiniCPM without moving Plandex's execution responsibilities
-into the control plane. Runtime state and model caches will
-live outside user Git worktrees. Only port 7860 will be exposed publicly.
+The current architecture includes local Needle3 contracts, GitHub MCP, Graphify, and JIT long-horizon policy planning.
+Phase 6 adds Open Code Review and remote MiniCPM without moving Plandex's execution responsibilities into the control plane.
+Runtime state and model caches live outside user Git worktrees. Only port 7860 is exposed publicly.
 
 ## Phase 3 control plane (current structural implementation)
 
@@ -269,5 +267,24 @@ The structural queries in this implementation read the private graph artifact
 through the existing adapter, so no query string is sent to Graphify CLI or any
 remote service.
 
-### Phase 3H deployment preflight isolation
-Tokenizer acquisition and readiness load the dependency-free tokenizer contract directly from its source file. They intentionally do not import the `open_webui` package, so the PostgreSQL/Plandex supervisor tier does not acquire the web application's optional Python dependency surface. The 2026-09-25 fresh-runtime rerun reconfirmed native migrations, health, local auth, plan creation/current identity, and server-restart identity agreement.
+## Phase 5 JIT policy planning & execution checkpoints
+
+```text
+Task
+  ↓
+Control Plane
+  ↓
+JIT Planner (long-horizon strategy & meta-policy)
+  ↓
+Plandex Strategy Context (plandex load --name jit-strategy-<hash>)
+  ↓
+Graphify structural evidence (plandex load --name structural-context-<hash>)
+  ↓
+Plandex execution segments
+  ↓
+Execution Checkpoints (PLAN_READY, SEGMENT_COMPLETE, VALIDATION_FAILED, etc.)
+  ↓
+Headroom -> Spark Contract -> Remote Spark
+```
+
+JIT is an optimization and long-horizon policy layer. It owns task classification, autonomy level choices, execution segment strategy, resource budget clamping, and checkpoint replanning triggers. It does not replace Plandex as the executor, nor does it edit files or issue git commands directly. If JIT is unreachable, the system fails open to conservative native Plandex fallback policies.

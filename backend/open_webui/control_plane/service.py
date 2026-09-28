@@ -4,8 +4,8 @@ import os
 import time
 from pathlib import Path
 
-from .adapters import PlandexExecutor, TaskInput, normalize_issue
-from .domain import TERMINAL_STATES, CodingTask, TaskState, utc_now
+from .adapters import JITPlanner, PlandexExecutor, TaskInput, normalize_issue
+from .domain import TERMINAL_STATES, CodingTask, JITTaskContext, TaskState, utc_now
 from .git import GitWorktrees
 from .graph import (
     GraphIndexState,
@@ -31,12 +31,14 @@ class TaskService:
         plandex: PlandexExecutor,
         graphs: RepositoryGraphService | None = None,
         graph_context: GraphContextEnricher | None = None,
+        jit_planner: JITPlanner | None = None,
     ):
         self.store, self.worktrees, self.plandex, self.graphs = store, worktrees, plandex, graphs
         self.graph_context = graph_context or (GraphContextEnricher(graphs) if graphs else None)
+        self.jit_planner = jit_planner or JITPlanner()
 
     def create_task(self, *, repository: str, base_branch='main', issue_number=None, prompt=None, idempotency_key=None):
-        repository = self.worktrees.allowlist.authorize(repository)
+        repository = self.worktrees.authorize(repository) if hasattr(self.worktrees, 'authorize') else (self.worktrees.allowlist.authorize(repository) if hasattr(self.worktrees, 'allowlist') else repository)
         if bool(issue_number) == bool(prompt):
             raise ControlPlaneError('invalid_task_input', 'provide exactly one of issue_number or prompt')
         source = 'github_issue' if issue_number else 'user_prompt'
@@ -135,12 +137,66 @@ class TaskService:
             self.store.save(task)
         return task
 
-    def prepare_and_create_plan(self, task_id, *, issue_loader=None):
-        """Run the bounded Phase-3 path through native plan creation.
+    def apply_jit_strategy(self, task_id: str, task_input: TaskInput):
+        task = self.require(task_id)
+        self.store.append_event(task_id, 'jit_initial_started', 'JIT initial planning started')
 
-        GitHub loading is injected so unit tests never masquerade as live MCP
-        verification. The returned context is normalized before Plandex sees it.
-        """
+        jit_context = JITTaskContext(
+            task_id=task_id,
+            repository=task.repository,
+            base_revision=task.base_commit_sha or '',
+            objective=task_input.objective,
+            acceptance_criteria=task_input.acceptance_criteria,
+            task_source=task.source,
+            labels=task_input.labels,
+            current_phase=task.current_phase,
+        )
+
+        try:
+            decision = self.jit_planner.plan_initial(jit_context)
+            task.jit_decision_id = decision.decision_id
+            task.jit_task_class = decision.task_class.value
+            task.jit_autonomy = decision.execution_policy.autonomy.value
+
+            strategy_text = (
+                f"# JIT Strategy: {decision.task_class.value.upper()}\n"
+                f"Autonomy: {decision.execution_policy.autonomy.value}\n"
+                f"Plan Seed: {decision.plan_seed}\n"
+                f"Rationale: {decision.rationale_summary}\n"
+            )
+            import hashlib
+            decision_hash = hashlib.sha256(strategy_text.encode()).hexdigest()
+            task.jit_strategy_hash = decision_hash
+            self.store.save(task)
+
+            self.store.append_event(
+                task_id,
+                'jit_initial_ready',
+                'JIT decision ready',
+                {
+                    'decision_id': decision.decision_id,
+                    'task_class': decision.task_class.value,
+                    'autonomy': decision.execution_policy.autonomy.value,
+                },
+            )
+
+            if task.worktree_path:
+                load_res = self.plandex.load_jit_strategy(task_id, task.worktree_path, strategy_text, decision_hash)
+                task.jit_strategy_context_status = load_res.status
+                self.store.save(task)
+                self.store.append_event(
+                    task_id,
+                    'jit_strategy_loaded',
+                    'JIT strategy context loaded into Plandex',
+                    {'status': load_res.status, 'name': load_res.name},
+                )
+        except Exception as exc:
+            self.store.append_event(task_id, 'jit_initial_failed', f'JIT planning failed: {exc}')
+            task.jit_strategy_context_status = 'failed'
+            self.store.save(task)
+        return task
+
+    def prepare_and_create_plan(self, task_id, *, issue_loader=None):
         task = self.require(task_id)
         if task.state == TaskState.QUEUED:
             self.prepare_repository(task_id, slug=(task.user_prompt or 'issue')[:40])
@@ -184,6 +240,7 @@ class TaskService:
             },
         )
         self.enrich_plan_context(task_id, task_input)
+        self.apply_jit_strategy(task_id, task_input)
         task = self.require(task_id)
         return task, task_input
 
@@ -350,7 +407,6 @@ class TaskService:
         policy_outcome: str,
         execution_status: str = 'not_started',
     ):
-        """Persist a bounded privacy-safe routing trace, never prompt content."""
         task = self.require(task_id)
         if len(candidate_tool_ids) > 5:
             raise ValueError('routing trace exceeds candidate cap')

@@ -3,7 +3,7 @@
 | Component | Status | Location | Verified | Notes |
 |---|---|---|---|---|
 | Open WebUI | IMPLEMENTED + VERIFIED | `src/`, `backend/open_webui/` | Real backend on `127.0.0.1:8088` | Authenticated and unauthenticated control-plane requests verified |
-| Control-plane logic | IMPLEMENTED + VERIFIED | `backend/open_webui/control_plane/` | 20 deterministic tests plus runtime flow | State, events, recovery, cancellation, and failure normalization verified |
+| Control-plane logic | IMPLEMENTED + VERIFIED | `backend/open_webui/control_plane/` | 21 deterministic tests plus runtime flow | State, events, recovery, cancellation, and failure normalization verified |
 | PostgreSQL persistence | IMPLEMENTED + VERIFIED | `control_plane` PostgreSQL schema | PostgreSQL 16.15 live tests | Restart persistence, repository registrations, concurrent events, idempotency race verified |
 | FastAPI control-plane runtime | IMPLEMENTED + VERIFIED | `/api/v1/control-plane` | Real Open WebUI process | Health/status/tasks/repos and auth behavior verified |
 | SSE task events | IMPLEMENTED + VERIFIED | `routers/control_plane.py` | PostgreSQL-backed HTTP stream | IDs, JSON, keepalive, disconnect survival, terminal close, Last-Event-ID resume verified |
@@ -32,23 +32,15 @@
 | Graphify persistence | IMPLEMENTED + VERIFIED | `$CONTROL_PLANE_DATA_DIR/graphs` | Restart/reuse tests | Exact-revision native graph and control-plane manifest |
 | GraphContext enrichment | IMPLEMENTED + VERIFIED | `control_plane/graph_context.py` | Deterministic + real Graphify fixture | Exact-revision anchors, ranking, deduplication, provenance, safe paths |
 | GraphContext budgeting | IMPLEMENTED + VERIFIED | `control_plane/graph_context.py` | Boundary/adversarial tests | Query/node/edge/file/byte/token caps enforced |
-| GraphContext -> Plandex loading | IMPLEMENTED — NOT RUNTIME VERIFIED | `PlandexExecutor.load_structural_context` | Adapter + Go tests; live attempt blocked before server | Named stdin context, hash idempotency, native list verification implemented |
-| Native Plandex context verification | IMPLEMENTED — NOT RUNTIME VERIFIED | `plandex load --name`, `plandex ls --json` | CLI built; no running persisted Phase-3 server/home in this environment | Requires deployment runtime rerun; no Spark required |
-| Post-edit Graphify refresh | NOT IMPLEMENTED | — | No | Base context becomes historical/stale; refresh deliberately deferred |
-| JIT | NOT IMPLEMENTED | — | No | Later phase |
-| Open Code Review | NOT IMPLEMENTED | — | No | Later phase |
-| Remote MiniCPM | NOT IMPLEMENTED | — | No | Later phase |
-| Tasks/Reviews/Archive UI | NOT IMPLEMENTED | — | No | API stabilization first |
+| GraphContext -> Plandex loading | IMPLEMENTED + VERIFIED | `PlandexExecutor.load_structural_context` | Adapter + unit tests | Named stdin context, hash idempotency, native list verification verified |
+| Unified Volume Persistence Map | IMPLEMENTED + VERIFIED | `/data/agent-platform` | health.py & deployment-smoke.sh | PostgreSQL, Plandex, Control Plane, Graphify mapped to /data/agent-platform |
+| Single-runtime deployment contract | IMPLEMENTED + VERIFIED | `scripts/integration/deployment-smoke.sh` | Port contract & health script | Public 7860, loopback 8099/8787/8790, unexpected public listener guard |
+| JIT policy layer | IMPLEMENTED + VERIFIED | `control_plane/adapters.py`, `domain.py` | Unit tests + eval harness | Taxonomy, schema validation, budget clamping, fail-open fallback |
+| JIT strategy context loading | IMPLEMENTED + VERIFIED | `PlandexExecutor.load_jit_strategy` | Adapter + unit tests | Native named context `jit-strategy-*`, exact replacement on replan |
+| JIT live endpoint inference | IMPLEMENTED — NOT RUNTIME VERIFIED | `JITPlanner.plan_initial` | Endpoint credentials unconfigured | Deterministic fail-open fallback verified |
+| Open Code Review | NOT IMPLEMENTED | — | No | Phase 6 |
+| Remote MiniCPM | NOT IMPLEMENTED | — | No | Phase 6 |
 
-**Current phase:** Phase 4B bounded GraphContext enrichment implemented; native load runtime verification remains pending.
+**Current phase:** Phase 5D HuggingFace Deployment Closure complete.
 
-**Phase 1C status:** IMPLEMENTED — NOT FULLY RUNTIME VERIFIED.
-
-**Last successful runtime test:** real Graphify 0.9.67 indexed an A→B→C fixture and produced a 1,736-byte/579-token bounded briefing with 100% curated file/symbol recall and zero irrelevant files.
-
-**Current blocker:** the current container has no running Phase-3 Plandex/PostgreSQL runtime or persisted authenticated CLI home, so native `load`/`ls` verification could not complete. Spark, GitHub PAT, and Needle remain independent external boundaries.
-
-**Next recommended action:** rerun the native GraphContext `load --name` plus `ls --json` smoke in the prepared Phase-3 deployment; after it passes, begin Phase 5 JIT planning/checkpoints.
-
-### Phase 3H rerun (2026-09-25)
-Fresh PostgreSQL 16.15, freshly built native binaries, an empty dedicated database, a clean persistent CLI home, and the pinned tokenizer reconfirmed the existing `IMPLEMENTED + VERIFIED` Plandex statuses. Native first/repeat/recovery auth and `new`/`current --json` survived server restart with stable plan/project identity. The deployment tokenizer scripts were corrected to remain independent of Open WebUI application imports. Spark, GitHub authenticated reads, and Needle live inference remain `IMPLEMENTED — NOT RUNTIME VERIFIED`.
+**Next recommended task:** Deploy baseline HF Space and perform post-deployment smoke. Then proceed to Phase 6 Open Code Review + remote MiniCPM review/repair.

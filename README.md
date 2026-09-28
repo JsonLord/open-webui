@@ -1,3 +1,9 @@
+---
+title: Open WebUI Agent Platform
+sdk: docker
+app_port: 7860
+---
+
 # Open WebUI 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
