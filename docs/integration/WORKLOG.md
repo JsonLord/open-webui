@@ -1,5 +1,13 @@
 # Integration worklog
 
+## 2026-09-28 — Phase 5D Deployment Closure & Hugging Face Space Persistence
+- Mapped single persistent volume root `APP_PERSIST_ROOT=/data/agent-platform` across all local state paths (`PGDATA`, `PLANDEX_BASE_DIR`, `PLANDEX_CLI_HOME`, `GRAPHIFY_DATA_DIR`, `CONTROL_PLANE_DATA_DIR`, `OPEN_WEBUI_DATA_DIR`).
+- Created machine-readable `integration/deployment-artifacts.json` capturing verified component versions, checksums, and artifact manifest metadata.
+- Updated `health.py`, `scripts/integration/common.sh`, and `scripts/integration/deployment-smoke.sh` to enforce persistent storage prechecks and port binding rules.
+- Updated `README.md` with Hugging Face Space Docker SDK YAML frontmatter (`sdk: docker`, `app_port: 7860`).
+- Configured `.hfignore` to exclude `.venv`, `.git`, `node_modules`, `build/`, `.svelte-kit/`, and local caches during `hf upload`.
+- Set Node.js build memory options in `Dockerfile` and disabled sourcemap generation in `vite.config.ts` to optimize container build performance.
+
 ## 2026-09-25 — Phase 4B Runtime Closure & Phase 5 JIT Policy Layer
 
 ### Changed

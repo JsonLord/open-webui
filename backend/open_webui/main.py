@@ -2962,6 +2962,12 @@ async def async_db_ping() -> None:
     await asyncio.to_thread(_sync_db_ping)
 
 
+@app.get('/api-docs')
+async def api_docs_redirect():
+    """Redirect /api-docs to Swagger UI documentation."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url='/docs')
+
 @app.get('/health')
 async def healthcheck():
     return {'status': True}

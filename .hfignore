@@ -1,0 +1,16 @@
+.venv/
+.venv*
+.git/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+*.log
+tmp/
+/tmp/
+data/
+backend/data/
+build/
+.svelte-kit/
