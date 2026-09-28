@@ -38,15 +38,20 @@ RUN cd /src/plandex/app/cli && \
 RUN cd /src/plandex/app/server && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /opt/integration/bin/plandex-server .
 
-# Build GitHub MCP Server
+######## GitHub MCP Server Builder ########
+# The pinned GitHub MCP revision requires Go 1.25.12. Keep Plandex on its
+# independently verified Go 1.23 toolchain rather than silently upgrading it.
+FROM golang:1.25.12-bookworm AS github-mcp-builder
 ARG GITHUB_MCP_VERSION=v1.12.2
 ARG GITHUB_MCP_REVISION=85598ba6e1256f7ebf4867b95d63b833c4549264
 RUN git clone --quiet https://github.com/github/github-mcp-server.git /tmp/github-mcp && \
     git -C /tmp/github-mcp checkout --quiet --detach "${GITHUB_MCP_REVISION}" && \
+    test "$(git -C /tmp/github-mcp rev-parse HEAD)" = "${GITHUB_MCP_REVISION}" && \
     cd /tmp/github-mcp && \
     CGO_ENABLED=0 go build -trimpath \
     -ldflags="-s -w -X main.version=${GITHUB_MCP_VERSION} -X main.commit=${GITHUB_MCP_REVISION} -X main.date=deployment-build" \
-    -o /opt/integration/bin/github-mcp-server ./cmd/github-mcp-server
+    -o /github-mcp-server ./cmd/github-mcp-server && \
+    /github-mcp-server --version
 
 ######## Integration Tiktoken Cache Builder ########
 FROM python:3.11-slim-bookworm AS plandex-tokenizer
@@ -256,6 +261,7 @@ COPY --from=build /app/backend .
 
 # Copy compiled Go integration binaries from builder
 COPY --from=integration-go-builder /opt/integration/bin /opt/integration/bin
+COPY --from=github-mcp-builder /github-mcp-server /opt/integration/bin/github-mcp-server
 
 # Copy pre-fetched tiktoken cache
 COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/tiktoken-cache
