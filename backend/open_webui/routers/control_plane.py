@@ -57,6 +57,7 @@ def get_service() -> TaskService:
         store.create_schema()
         store.recover_incomplete()
         root = Path(os.getenv('CONTROL_PLANE_DATA_DIR', './data/control-plane'))
+        repository_root = Path(os.getenv('REPOSITORY_CACHE_DIR', root / 'repositories'))
         allowlist = RepositoryAllowlist.from_env()
         for repository in allowlist.repositories:
             store.register_repository(repository, {'source': 'ALLOWED_GITHUB_REPOS'})
@@ -67,7 +68,7 @@ def get_service() -> TaskService:
         )
         _service = TaskService(
             store,
-            GitWorktrees(root / 'repos', root / 'worktrees', allowlist),
+            GitWorktrees(repository_root / 'repos', repository_root / 'worktrees', allowlist),
             PlandexExecutor(),
             graphs,
         )

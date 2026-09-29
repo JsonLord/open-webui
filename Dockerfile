@@ -38,15 +38,20 @@ RUN cd /src/plandex/app/cli && \
 RUN cd /src/plandex/app/server && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /opt/integration/bin/plandex-server .
 
-# Build GitHub MCP Server
+######## GitHub MCP Server Builder ########
+# The pinned GitHub MCP revision requires Go 1.25.12. Keep Plandex on its
+# independently verified Go 1.23 toolchain rather than silently upgrading it.
+FROM golang:1.25.12-bookworm AS github-mcp-builder
 ARG GITHUB_MCP_VERSION=v1.12.2
 ARG GITHUB_MCP_REVISION=85598ba6e1256f7ebf4867b95d63b833c4549264
 RUN git clone --quiet https://github.com/github/github-mcp-server.git /tmp/github-mcp && \
     git -C /tmp/github-mcp checkout --quiet --detach "${GITHUB_MCP_REVISION}" && \
+    test "$(git -C /tmp/github-mcp rev-parse HEAD)" = "${GITHUB_MCP_REVISION}" && \
     cd /tmp/github-mcp && \
     CGO_ENABLED=0 go build -trimpath \
     -ldflags="-s -w -X main.version=${GITHUB_MCP_VERSION} -X main.commit=${GITHUB_MCP_REVISION} -X main.date=deployment-build" \
-    -o /opt/integration/bin/github-mcp-server ./cmd/github-mcp-server
+    -o /github-mcp-server ./cmd/github-mcp-server && \
+    /github-mcp-server --version
 
 ######## Integration Tiktoken Cache Builder ########
 FROM python:3.11-slim-bookworm AS plandex-tokenizer
@@ -69,9 +74,6 @@ ARG USE_SLIM
 ARG UID
 ARG GID
 
-# Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory)
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-
 WORKDIR /app
 
 # to store git revision in build
@@ -82,7 +84,8 @@ RUN npm ci --force
 
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
-RUN npm run build && \
+RUN echo "Frontend build Node heap limit: 4096 MB" && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm run build && \
     if [ "$USE_SLIM" = "true" ]; then find build -type f -name '*.map' -delete; fi
 
 # Prepare backend ownership before the final copy so static assets occupy one layer.
@@ -111,7 +114,7 @@ ENV PYTHONUNBUFFERED=1
 
 ## Basis ##
 ENV ENV=prod \
-    PORT=8080 \
+    PORT=7860 \
     # pass build args to the build
     USE_OLLAMA_DOCKER=${USE_OLLAMA} \
     USE_CUDA_DOCKER=${USE_CUDA} \
@@ -181,7 +184,7 @@ RUN if [ "$USE_SLIM" = "true" ] && { [ "$USE_CUDA" = "true" ] || [ "$USE_OLLAMA"
 # Install PostgreSQL server runtime for single-container deployment
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl jq ca-certificates procps postgresql postgresql-contrib \
+    curl jq ca-certificates procps iproute2 postgresql postgresql-contrib \
     && if [ "$USE_SLIM" != "true" ]; then \
     apt-get install -y --no-install-recommends \
     git build-essential pandoc gcc libmariadb-dev ffmpeg libsm6 libxext6; \
@@ -199,13 +202,16 @@ ENV UV_LINK_MODE=copy
 RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     set -e; \
     if [ "$USE_SLIM" = "true" ]; then \
+    pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
     uv pip install --system -r requirements-slim.txt --no-cache-dir; \
     elif [ "$USE_CUDA" = "true" ]; then \
     # If you use CUDA the whisper and embedding model will be downloaded on first use
     # fix: pin torch<=2.9.1 - torch 2.10.0 aarch64 wheels cause SIGILL on ARM devices (RPi 4 Cortex-A72) #21349
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
-    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt --no-cache-dir; \
+    uv venv /opt/integration/graphify-venv; \
+    uv pip install --python /opt/integration/graphify-venv/bin/python -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')"; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')"; \
     python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
@@ -213,7 +219,9 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv \
     else \
     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
     uv pip install --system -r requirements.txt --no-cache-dir; \
-    uv pip install --system -r /tmp/integration/requirements.txt -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
+    uv pip install --system -r /tmp/integration/requirements.txt --no-cache-dir; \
+    uv venv /opt/integration/graphify-venv; \
+    uv pip install --python /opt/integration/graphify-venv/bin/python -r /tmp/integration/requirements-graphify.txt --no-cache-dir; \
     if [ "$USE_SLIM" != "true" ]; then \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ['RAG_EMBEDDING_MODEL'], device='cpu')" || true; \
     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')" || true; \
@@ -252,6 +260,7 @@ COPY --from=build /app/backend .
 
 # Copy compiled Go integration binaries from builder
 COPY --from=integration-go-builder /opt/integration/bin /opt/integration/bin
+COPY --from=github-mcp-builder /github-mcp-server /opt/integration/bin/github-mcp-server
 
 # Copy pre-fetched tiktoken cache
 COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/tiktoken-cache
@@ -260,6 +269,18 @@ COPY --from=plandex-tokenizer /opt/integration/tiktoken-cache /opt/integration/t
 COPY integration /app/integration
 COPY scripts /app/scripts
 COPY AGENTS.md /app/AGENTS.md
+COPY plandex/app/server/migrations /opt/integration/plandex-server/migrations
+
+# The distro-supported PostgreSQL runtime in Debian bookworm is PostgreSQL 15.
+# Keep the server work tree immutable and all component state under APP_PERSIST_ROOT.
+ENV PG_MAJOR=15 \
+    PORT=7860 \
+    PLANDEX_TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache \
+    PLANDEX_SERVER_WORK_DIR=/opt/integration/plandex-server \
+    GRAPHIFY_EXECUTABLE=/opt/integration/graphify-venv/bin/graphify
+
+RUN chmod 0755 /app/scripts/integration/*.sh && \
+    test -d /opt/integration/plandex-server/migrations
 
 # Fetch Needle runtime artifacts and perform offline preflight during build
 RUN --mount=type=secret,id=hf_token,required=false \
@@ -272,11 +293,19 @@ RUN test -x /opt/integration/bin/plandex && \
     test -x /opt/integration/bin/plandex-server && \
     test -x /opt/integration/bin/github-mcp-server && \
     test -f /opt/integration/tiktoken-cache/fb374d419588a4632f3f557e76b4b70aebbca790 && \
+    TIKTOKEN_CACHE_DIR=/opt/integration/tiktoken-cache python /app/scripts/integration/plandex-tokenizer-preflight.py && \
+    test -x /opt/integration/graphify-venv/bin/graphify && \
+    test "$(/opt/integration/graphify-venv/bin/graphify --version)" = "graphify 0.9.67" && \
+    HF_HUB_OFFLINE=1 python /app/scripts/integration/needle-preflight.py && \
+    test -x /app/scripts/integration/supervisor.sh && \
     test -f /app/integration/deployment-artifacts.json && \
     test -x /app/scripts/integration/deployment-smoke.sh && \
+    PG_BINDIR="$(pg_config --bindir)" && \
+    test -x "$PG_BINDIR/initdb" && test -x "$PG_BINDIR/pg_ctl" && \
+    test "$("$PG_BINDIR/postgres" --version | awk '{print $3}' | cut -d. -f1)" = "$PG_MAJOR" && \
     echo "=== BUILD PROOF: All deployment artifacts and binaries successfully verified ==="
 
-EXPOSE 7860 8080
+EXPOSE 7860
 
 HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-7860}/health | jq -ne 'input.status == true' || exit 1
 

@@ -1,159 +1,97 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# deployment-smoke.sh - Deployment readiness check for Open WebUI runtime deployment
-# Verifies process inventory, public vs loopback port bindings, storage volume, and service health.
+# Machine-readable deployment readiness. Critical failures return non-zero;
+# optional capability failures are explicit degradation and preserve readiness.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+REPORT_PATH=${1:-$ROOT_DIR/deployment-readiness-report.json}
+APP_PERSIST_ROOT=${APP_PERSIST_ROOT:-/data/agent-platform}
+REQUIRE_PERSISTENT_STORAGE=${REQUIRE_PERSISTENT_STORAGE:-0}
+PLANDEX_TIKTOKEN_CACHE_DIR=${PLANDEX_TIKTOKEN_CACHE_DIR:-/opt/integration/tiktoken-cache}
+GRAPHIFY_EXECUTABLE=${GRAPHIFY_EXECUTABLE:-/opt/integration/graphify-venv/bin/graphify}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+status_from() {
+  local override=$1; shift
+  if [[ -n "$override" ]]; then printf '%s' "$override"; return; fi
+  if "$@" >/dev/null 2>&1; then printf ready; else printf failed; fi
+}
+port_status() { ss -H -ltn | awk -v endpoint="$1" '$4 == endpoint {ok=1} END {exit !ok}'; }
 
-REPORT_PATH="${1:-${ROOT_DIR}/deployment-readiness-report.json}"
-
-echo "=== Open WebUI Single-Runtime Deployment Readiness Check ==="
-
-DEPLOYMENT_READY=true
-
-# Storage volume check
-APP_PERSIST_ROOT="${APP_PERSIST_ROOT:-/data/agent-platform}"
-REQUIRE_PERSISTENT_STORAGE="${REQUIRE_PERSISTENT_STORAGE:-0}"
-
-echo "Checking storage volume..."
-STORAGE_OK=true
-if [ -d "$APP_PERSIST_ROOT" ]; then
-    if touch "$APP_PERSIST_ROOT/.write_test" 2>/dev/null; then
-        rm -f "$APP_PERSIST_ROOT/.write_test"
-        echo "[STORAGE] $APP_PERSIST_ROOT: WRITABLE OK"
-    else
-        echo "[STORAGE] $APP_PERSIST_ROOT: NOT WRITABLE"
-        STORAGE_OK=false
-    fi
+storage_probe() { mkdir -p "$APP_PERSIST_ROOT" && touch "$APP_PERSIST_ROOT/.smoke-write" && rm -f "$APP_PERSIST_ROOT/.smoke-write"; }
+if [[ "$REQUIRE_PERSISTENT_STORAGE" == 1 ]]; then
+  storage=$(status_from "${SMOKE_STORAGE_STATUS:-}" storage_probe)
 else
-    echo "[STORAGE] $APP_PERSIST_ROOT: ABSENT"
-    if [ "$REQUIRE_PERSISTENT_STORAGE" = "1" ]; then
-        STORAGE_OK=false
-    fi
+  storage=ready
 fi
+postgres=$(status_from "${SMOKE_POSTGRES_STATUS:-}" pg_isready -h 127.0.0.1 -p 5432)
+plandex=$(status_from "${SMOKE_PLANDEX_STATUS:-}" curl -fsS http://127.0.0.1:8099/health)
+tokenizer=$(status_from "${SMOKE_TOKENIZER_STATUS:-}" env TIKTOKEN_CACHE_DIR="$PLANDEX_TIKTOKEN_CACHE_DIR" python3 "$SCRIPT_DIR/plandex-tokenizer-preflight.py")
+plandex_auth=$(status_from "${SMOKE_PLANDEX_AUTH_STATUS:-}" env TIKTOKEN_CACHE_DIR="$PLANDEX_TIKTOKEN_CACHE_DIR" python3 "$SCRIPT_DIR/plandex-auth-preflight.py")
+open_webui=$(status_from "${SMOKE_OPEN_WEBUI_STATUS:-}" curl -fsS http://127.0.0.1:7860/health)
 
-if [ "$REQUIRE_PERSISTENT_STORAGE" = "1" ] && [ "$STORAGE_OK" = "false" ]; then
-    echo "[STORAGE] ERROR: Persistent storage required but unavailable!"
-    DEPLOYMENT_READY=false
+public_guard_probe() {
+  port_status 0.0.0.0:7860 &&
+    ! ss -H -ltn | awk '$4 ~ /^0\.0\.0\.0:/ && $4 != "0.0.0.0:7860" {bad=1} END {exit !bad}'
+}
+public_guard=$(status_from "${SMOKE_PUBLIC_GUARD_STATUS:-}" public_guard_probe)
+# Required services must also obey their loopback contracts.
+[[ $(status_from "${SMOKE_POSTGRES_PORT_STATUS:-}" port_status 127.0.0.1:5432) == ready ]] || postgres=failed
+[[ $(status_from "${SMOKE_PLANDEX_PORT_STATUS:-}" port_status 127.0.0.1:8099) == ready ]] || plandex=failed
+
+spark_configured=false
+[[ -n "${SPARK_API_KEY:-}" && -n "${SPARK_BASE_URL:-}" ]] && spark_configured=true
+if [[ -n "${SMOKE_SPARK_STATUS:-}" ]]; then
+  spark=$SMOKE_SPARK_STATUS
+elif [[ "$spark_configured" == false ]]; then
+  spark=not_configured
+elif port_status 127.0.0.1:8787 && port_status 127.0.0.1:8790 && curl -fsS http://127.0.0.1:8790/readyz >/dev/null 2>&1; then
+  spark=ready
+else
+  spark=unavailable
 fi
+headroom=$([[ "$spark" == ready ]] && echo ready || { [[ "$spark" == not_configured ]] && echo not_configured || echo unavailable; })
 
-# Function to check port binding
-check_port_binding() {
-    local port="$1"
-    local expected_host="$2" # "public" (0.0.0.0) or "loopback" (127.0.0.1)
-    local service_name="$3"
+graphify=${SMOKE_GRAPHIFY_STATUS:-}
+if [[ -z "$graphify" ]]; then
+  if [[ ! -x "$GRAPHIFY_EXECUTABLE" ]]; then graphify=unavailable
+  elif "$GRAPHIFY_EXECUTABLE" --version 2>/dev/null | grep -Fxq 'graphify 0.9.67'; then graphify=ready
+  else graphify=failed; fi
+fi
+needle=${SMOKE_NEEDLE_STATUS:-}
+if [[ -z "$needle" ]]; then
+  if HF_HUB_OFFLINE=1 python3 "$SCRIPT_DIR/needle-preflight.py" >/dev/null 2>&1; then needle=ready; else needle=failed; fi
+fi
+jit=$([[ -n "${JIT_BASE_URL:-}" ]] && echo unavailable || echo not_configured)
+github_authenticated=$([[ -n "${GITHUB_PAT:-}" ]] && echo ready || echo not_configured)
 
-    local listening
-    listening=$(lsof -i :"$port" -sTCP:LISTEN -P -n 2>/dev/null || true)
+deployment_ready=true
+for value in "$storage" "$postgres" "$plandex" "$tokenizer" "$plandex_auth" "$open_webui" "$public_guard"; do
+  [[ "$value" == ready ]] || deployment_ready=false
+done
 
-    if [ -z "$listening" ]; then
-        echo "[PORT] $service_name ($port): NOT RUNNING"
-        return 1
-    fi
-
-    if [ "$expected_host" = "public" ]; then
-        if echo "$listening" | grep -qE "(\*:|0\.0\.0\.0:)$port"; then
-            echo "[PORT] $service_name ($port): PUBLIC OK (0.0.0.0)"
-            return 0
-        else
-            echo "[PORT] $service_name ($port): MISCONFIGURED (expected 0.0.0.0)"
-            return 1
-        fi
-    else
-        if echo "$listening" | grep -qE "(127\.0\.0\.1|localhost|::1):$port" && ! echo "$listening" | grep -qE "(\*:|0\.0\.0\.0:)$port"; then
-            echo "[PORT] $service_name ($port): LOOPBACK OK (127.0.0.1)"
-            return 0
-        else
-            echo "[PORT] $service_name ($port): UNEXPECTED PUBLIC LISTENER or MISCONFIGURED"
-            return 1
-        fi
-    fi
-}
-
-# Check forbidden public ports (any listening on 0.0.0.0 except 7860)
-check_unexpected_public_listeners() {
-    local unexpected
-    unexpected=$(lsof -i -sTCP:LISTEN -P -n 2>/dev/null | grep -E "(\*:|0\.0\.0\.0:)" | grep -v ":7860" || true)
-    if [ -n "$unexpected" ]; then
-        echo "[PORT SAFETY] WARNING: Unexpected public listeners found:"
-        echo "$unexpected"
-        return 1
-    else
-        echo "[PORT SAFETY] OK: Only allowed public listeners present."
-        return 0
-    fi
-}
-
-# Port contract checks
-echo "Checking port bindings..."
-OPEN_WEBUI_PORT_OK=false
-PLANDEX_PORT_OK=false
-HEADROOM_PORT_OK=false
-SPARK_ADAPTER_PORT_OK=false
-
-if check_port_binding 7860 "public" "Open WebUI"; then OPEN_WEBUI_PORT_OK=true; else DEPLOYMENT_READY=false; fi
-if check_port_binding 8099 "loopback" "Plandex"; then PLANDEX_PORT_OK=true; else DEPLOYMENT_READY=false; fi
-if check_port_binding 8787 "loopback" "Headroom"; then HEADROOM_PORT_OK=true; else DEPLOYMENT_READY=false; fi
-if check_port_binding 8790 "loopback" "Spark Adapter"; then SPARK_ADAPTER_PORT_OK=true; else DEPLOYMENT_READY=false; fi
-
-PORT_SAFETY_OK=false
-if check_unexpected_public_listeners; then PORT_SAFETY_OK=true; else DEPLOYMENT_READY=false; fi
-
-# Evaluate HTTP health endpoints if services are running
-PLANDEX_HEALTH=false
-if curl -s -f http://127.0.0.1:8099/health >/dev/null 2>&1; then PLANDEX_HEALTH=true; fi
-
-HEADROOM_HEALTH=false
-if curl -s -f http://127.0.0.1:8787/health >/dev/null 2>&1; then HEADROOM_HEALTH=true; fi
-
-SPARK_ADAPTER_HEALTH=false
-if curl -s -f http://127.0.0.1:8790/health >/dev/null 2>&1; then SPARK_ADAPTER_HEALTH=true; fi
-
-# Produce report JSON
-cat <<EOF > "$REPORT_PATH"
+mkdir -p "${REPORT_PATH%/*}"
+cat >"$REPORT_PATH" <<EOF_JSON
 {
-  "deployment_ready": $DEPLOYMENT_READY,
-  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "storage": {
-    "app_persist_root": "$APP_PERSIST_ROOT",
-    "require_persistent": $REQUIRE_PERSISTENT_STORAGE,
-    "ok": $STORAGE_OK
-  },
+  "deployment_ready": $deployment_ready,
   "critical": {
-    "open_webui_port_7860": $OPEN_WEBUI_PORT_OK,
-    "plandex_port_8099": $PLANDEX_PORT_OK,
-    "plandex_health": $PLANDEX_HEALTH
+    "storage": "$storage",
+    "postgres": "$postgres",
+    "plandex": "$plandex",
+    "tokenizer": "$tokenizer",
+    "plandex_auth": "$plandex_auth",
+    "open_webui": "$open_webui",
+    "public_listener_guard": "$public_guard"
   },
-  "optional_degraded": {
-    "headroom_port_8787": $HEADROOM_PORT_OK,
-    "headroom_health": $HEADROOM_HEALTH,
-    "spark_adapter_port_8790": $SPARK_ADAPTER_PORT_OK,
-    "spark_adapter_health": $SPARK_ADAPTER_HEALTH
-  },
-  "ports": {
-    "public_contract_ok": $PORT_SAFETY_OK
-  },
-  "persistence": {
-    "postgres": "$APP_PERSIST_ROOT/postgres",
-    "plandex_server": "$APP_PERSIST_ROOT/plandex-server",
-    "plandex_cli": "$APP_PERSIST_ROOT/plandex-cli",
-    "open_webui": "$APP_PERSIST_ROOT/open-webui",
-    "control_plane": "$APP_PERSIST_ROOT/control-plane",
-    "repositories": "$APP_PERSIST_ROOT/repositories",
-    "graphify": "$APP_PERSIST_ROOT/graphify"
+  "degraded": {
+    "graphify": "$graphify",
+    "needle": "$needle",
+    "spark": "$spark",
+    "headroom": "$headroom",
+    "jit": "$jit",
+    "github_authenticated": "$github_authenticated"
   }
 }
-EOF
-
-echo "Deployment readiness report generated at $REPORT_PATH:"
+EOF_JSON
 cat "$REPORT_PATH"
-
-if [ "$DEPLOYMENT_READY" = "true" ]; then
-    echo "=== Deployment Check PASSED ==="
-    exit 0
-else
-    echo "=== Deployment Check FAILED or DEGRADED ==="
-    exit 1
-fi
+[[ "$deployment_ready" == true ]]
